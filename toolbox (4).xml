@@ -1,0 +1,528 @@
+<xml xmlns="https://developers.google.com/blockly/xml" id="toolbox" style="display: none">
+  <category name="Logic" colour="#5b80a5">
+    <block type="controls_if"></block>
+    <block type="logic_compare">
+      <field name="OP">EQ</field>
+    </block>
+    <block type="logic_operation">
+      <field name="OP">AND</field>
+    </block>
+    <block type="logic_negate"></block>
+    <block type="logic_boolean">
+      <field name="BOOL">TRUE</field>
+    </block>
+    <block type="logic_null"></block>
+    <block type="logic_ternary"></block>
+  </category>
+  <category name="Loops" colour="#5ba55b">
+    <block type="controls_repeat_ext">
+      <value name="TIMES">
+        <shadow type="math_number">
+          <field name="NUM">10</field>
+        </shadow>
+      </value>
+    </block>
+    <block type="controls_whileUntil">
+      <field name="MODE">WHILE</field>
+    </block>
+    <block type="controls_for">
+      <field name="VAR" id="|h^O,qG#--#N)ucdxoq^">i</field>
+      <value name="FROM">
+        <shadow type="math_number">
+          <field name="NUM">1</field>
+        </shadow>
+      </value>
+      <value name="TO">
+        <shadow type="math_number">
+          <field name="NUM">10</field>
+        </shadow>
+      </value>
+      <value name="BY">
+        <shadow type="math_number">
+          <field name="NUM">1</field>
+        </shadow>
+      </value>
+    </block>
+    <block type="controls_forEach">
+      <field name="VAR" id="!o0{qt,HW+oaaRW210wW">j</field>
+    </block>
+    <block type="controls_flow_statements">
+      <field name="FLOW">BREAK</field>
+    </block>
+  </category>
+  <category name="Math" colour="#5b67a5">
+    <block type="math_number">
+      <field name="NUM">0</field>
+    </block>
+    <block type="math_arithmetic">
+      <field name="OP">ADD</field>
+      <value name="A">
+        <shadow type="math_number">
+          <field name="NUM">1</field>
+        </shadow>
+      </value>
+      <value name="B">
+        <shadow type="math_number">
+          <field name="NUM">1</field>
+        </shadow>
+      </value>
+    </block>
+    <block type="math_single">
+      <field name="OP">ROOT</field>
+      <value name="NUM">
+        <shadow type="math_number">
+          <field name="NUM">9</field>
+        </shadow>
+      </value>
+    </block>
+    <block type="math_trig">
+      <field name="OP">SIN</field>
+      <value name="NUM">
+        <shadow type="math_number">
+          <field name="NUM">45</field>
+        </shadow>
+      </value>
+    </block>
+    <block type="math_constant">
+      <field name="CONSTANT">PI</field>
+    </block>
+    <block type="math_number_property">
+      <mutation divisor_input="false"></mutation>
+      <field name="PROPERTY">EVEN</field>
+      <value name="NUMBER_TO_CHECK">
+        <shadow type="math_number">
+          <field name="NUM">0</field>
+        </shadow>
+      </value>
+    </block>
+    <block type="math_round">
+      <field name="OP">ROUND</field>
+      <value name="NUM">
+        <shadow type="math_number">
+          <field name="NUM">3.1</field>
+        </shadow>
+      </value>
+    </block>
+    <block type="math_on_list">
+      <mutation op="SUM"></mutation>
+      <field name="OP">SUM</field>
+    </block>
+    <block type="math_modulo">
+      <value name="DIVIDEND">
+        <shadow type="math_number">
+          <field name="NUM">64</field>
+        </shadow>
+      </value>
+      <value name="DIVISOR">
+        <shadow type="math_number">
+          <field name="NUM">10</field>
+        </shadow>
+      </value>
+    </block>
+    <block type="math_constrain">
+      <value name="VALUE">
+        <shadow type="math_number">
+          <field name="NUM">50</field>
+        </shadow>
+      </value>
+      <value name="LOW">
+        <shadow type="math_number">
+          <field name="NUM">1</field>
+        </shadow>
+      </value>
+      <value name="HIGH">
+        <shadow type="math_number">
+          <field name="NUM">100</field>
+        </shadow>
+      </value>
+    </block>
+    <block type="math_random_int">
+      <value name="FROM">
+        <shadow type="math_number">
+          <field name="NUM">1</field>
+        </shadow>
+      </value>
+      <value name="TO">
+        <shadow type="math_number">
+          <field name="NUM">100</field>
+        </shadow>
+      </value>
+    </block>
+    <block type="math_random_float"></block>
+  </category>
+  <category name="Text" colour="#5ba58c">
+    <block type="text">
+      <field name="TEXT"></field>
+    </block>
+    <block type="text_join">
+      <mutation items="2"></mutation>
+    </block>
+    <block type="text_append">
+      <field name="VAR" id="49,dEGY+;xEN@30Bm7[f">item</field>
+      <value name="TEXT">
+        <shadow type="text">
+          <field name="TEXT"></field>
+        </shadow>
+      </value>
+    </block>
+    <block type="text_length">
+      <value name="VALUE">
+        <shadow type="text">
+          <field name="TEXT">abc</field>
+        </shadow>
+      </value>
+    </block>
+    <block type="text_isEmpty">
+      <value name="VALUE">
+        <shadow type="text">
+          <field name="TEXT"></field>
+        </shadow>
+      </value>
+    </block>
+    <block type="text_indexOf">
+      <field name="END">FIRST</field>
+      <value name="VALUE">
+        <block type="variables_get">
+          <field name="VAR" id="7D`x;dk`+5tLGDT/x_No">text</field>
+        </block>
+      </value>
+      <value name="FIND">
+        <shadow type="text">
+          <field name="TEXT">abc</field>
+        </shadow>
+      </value>
+    </block>
+    <block type="text_charAt">
+      <mutation at="true"></mutation>
+      <field name="WHERE">FROM_START</field>
+      <value name="VALUE">
+        <block type="variables_get">
+          <field name="VAR" id="7D`x;dk`+5tLGDT/x_No">text</field>
+        </block>
+      </value>
+    </block>
+    <block type="text_getSubstring">
+      <mutation at1="true" at2="true"></mutation>
+      <field name="WHERE1">FROM_START</field>
+      <field name="WHERE2">FROM_START</field>
+      <value name="STRING">
+        <block type="variables_get">
+          <field name="VAR" id="7D`x;dk`+5tLGDT/x_No">text</field>
+        </block>
+      </value>
+    </block>
+    <block type="text_changeCase">
+      <field name="CASE">UPPERCASE</field>
+      <value name="TEXT">
+        <shadow type="text">
+          <field name="TEXT">abc</field>
+        </shadow>
+      </value>
+    </block>
+    <block type="text_trim">
+      <field name="MODE">BOTH</field>
+      <value name="TEXT">
+        <shadow type="text">
+          <field name="TEXT">abc</field>
+        </shadow>
+      </value>
+    </block>
+    <block type="text_print">
+      <value name="TEXT">
+        <shadow type="text">
+          <field name="TEXT">abc</field>
+        </shadow>
+      </value>
+    </block>
+    <block type="text_prompt_ext">
+      <mutation type="TEXT"></mutation>
+      <field name="TYPE">TEXT</field>
+      <value name="TEXT">
+        <shadow type="text">
+          <field name="TEXT">abc</field>
+        </shadow>
+      </value>
+    </block>
+  </category>
+  <category name="Lists" colour="#745ba5">
+    <block type="lists_create_with">
+      <mutation items="0"></mutation>
+    </block>
+    <block type="lists_create_with">
+      <mutation items="3"></mutation>
+    </block>
+    <block type="lists_repeat">
+      <value name="NUM">
+        <shadow type="math_number">
+          <field name="NUM">5</field>
+        </shadow>
+      </value>
+    </block>
+    <block type="lists_length"></block>
+    <block type="lists_isEmpty"></block>
+    <block type="lists_indexOf">
+      <field name="END">FIRST</field>
+      <value name="VALUE">
+        <block type="variables_get">
+          <field name="VAR" id="Z$|xDx{)UrhY5ele.{XL">list</field>
+        </block>
+      </value>
+    </block>
+    <block type="lists_getIndex">
+      <mutation statement="false" at="true"></mutation>
+      <field name="MODE">GET</field>
+      <field name="WHERE">FROM_START</field>
+      <value name="VALUE">
+        <block type="variables_get">
+          <field name="VAR" id="Z$|xDx{)UrhY5ele.{XL">list</field>
+        </block>
+      </value>
+    </block>
+    <block type="lists_setIndex">
+      <mutation at="true"></mutation>
+      <field name="MODE">SET</field>
+      <field name="WHERE">FROM_START</field>
+      <value name="LIST">
+        <block type="variables_get">
+          <field name="VAR" id="Z$|xDx{)UrhY5ele.{XL">list</field>
+        </block>
+      </value>
+    </block>
+    <block type="lists_getSublist">
+      <mutation at1="true" at2="true"></mutation>
+      <field name="WHERE1">FROM_START</field>
+      <field name="WHERE2">FROM_START</field>
+      <value name="LIST">
+        <block type="variables_get">
+          <field name="VAR" id="Z$|xDx{)UrhY5ele.{XL">list</field>
+        </block>
+      </value>
+    </block>
+    <block type="lists_split">
+      <mutation mode="SPLIT"></mutation>
+      <field name="MODE">SPLIT</field>
+      <value name="DELIM">
+        <shadow type="text">
+          <field name="TEXT">,</field>
+        </shadow>
+      </value>
+    </block>
+    <block type="lists_sort">
+      <field name="TYPE">NUMERIC</field>
+      <field name="DIRECTION">1</field>
+    </block>
+  </category>
+  <category name="Colour" colour="#a5745b">
+    <block type="colour_picker">
+      <field name="COLOUR">#ff0000</field>
+    </block>
+    <block type="colour_random"></block>
+    <block type="colour_rgb">
+      <value name="RED">
+        <shadow type="math_number">
+          <field name="NUM">100</field>
+        </shadow>
+      </value>
+      <value name="GREEN">
+        <shadow type="math_number">
+          <field name="NUM">50</field>
+        </shadow>
+      </value>
+      <value name="BLUE">
+        <shadow type="math_number">
+          <field name="NUM">0</field>
+        </shadow>
+      </value>
+    </block>
+    <block type="colour_blend">
+      <value name="COLOUR1">
+        <shadow type="colour_picker">
+          <field name="COLOUR">#ff0000</field>
+        </shadow>
+      </value>
+      <value name="COLOUR2">
+        <shadow type="colour_picker">
+          <field name="COLOUR">#3333ff</field>
+        </shadow>
+      </value>
+      <value name="RATIO">
+        <shadow type="math_number">
+          <field name="NUM">0.5</field>
+        </shadow>
+      </value>
+    </block>
+  </category>
+  <sep></sep>
+  <category name="Variables" colour="#a55b80" custom="VARIABLE"></category>
+  <category name="Functions" colour="#995ba5" custom="PROCEDURE"></category>
+  <sep></sep>
+  <category name="Trade Definition" colour="#000000">
+    <block type="trade_settings" deletable="false" movable="false" editable="false">
+      <field name="duration_unit">OPTIONNAME</field>
+      <field name="stake_unit">OPTIONNAME</field>
+    </block>
+    <block type="virtual_hook" deletable="false" movable="false" editable="false">
+      <field name="virtualhook_start_when">L</field>
+    </block>
+    <block type="main_block">
+      <field name="frist_market">OPTIONNAME</field>
+      <field name="second_market">OPTIONNAME</field>
+      <field name="third_market">OPTIONNAME</field>
+      <field name="frist_catogory">OPTIONNAME</field>
+      <field name="second_catogory">OPTIONNAME</field>
+      <field name="contract_type">both</field>
+      <field name="candle_interval">1m</field>
+      <field name="buysellError">FALSE</field>
+      <field name="lasttradeofError">TRUE</field>
+      <statement name="trade_options">
+        <block type="trade_settings" deletable="false" movable="false" editable="false">
+          <field name="duration_unit">OPTIONNAME</field>
+          <field name="stake_unit">OPTIONNAME</field>
+        </block>
+      </statement>
+    </block>
+  </category>
+  <category name="Before Purchase">
+    <block type="payout" deletable="false" movable="false" editable="false">
+      <field name="payout_direction">OPTIONNAME</field>
+    </block>
+    <block type="askprice" deletable="false" movable="false" editable="false">
+      <field name="payout_direction">OPTIONNAME</field>
+    </block>
+    <block type="purchase" deletable="false" movable="false" editable="false">
+      <field name="purchase_direction">OPTIONNAME</field>
+    </block>
+    <block type="go__to_the_trade_option" deletable="false" movable="false" editable="false"></block>
+  </category>
+  <category name="During Purchase">
+    <block type="sell_avilable" deletable="false" movable="false" editable="false"></block>
+    <block type="sell_profit_loss" deletable="false" movable="false" editable="false"></block>
+    <block type="sell_at_market" deletable="false" movable="false" editable="false"></block>
+  </category>
+  <category name="After Purchase">
+    <block type="result_is" deletable="false" movable="false" editable="false">
+      <field name="result_is_direction">won</field>
+    </block>
+    <block type="contract_details" deletable="false" movable="false" editable="false">
+      <field name="result_is_direction">statement</field>
+    </block>
+    <block type="trade_again" deletable="false" movable="false" editable="false"></block>
+  </category>
+  <sep></sep>
+  <category name="Tick Analysis" colour="#000000">
+    <block type="last_tick" deletable="false" movable="false" editable="false"></block>
+    <block type="last_tick_string" deletable="false" movable="false" editable="false"></block>
+    <block type="last_digit" deletable="false" movable="false" editable="false"></block>
+    <block type="tick_direction" deletable="false" movable="false" editable="false">
+      <field name="tick_direction">rise</field>
+    </block>
+    <block type="tick_list" deletable="false" movable="false" editable="false"></block>
+    <block type="tick_string_list" deletable="false" movable="false" editable="false"></block>
+    <block type="last_color_ticks" deletable="false" movable="false" editable="false"></block>
+    <block type="last_digit_list" deletable="false" movable="false" editable="false"></block>
+    <block type="last_color_digit_list" deletable="false" movable="false" editable="false"></block>
+    <block type="check_digit_color_pattern" deletable="false" movable="false" editable="false"></block>
+    <block type="check_direction_pattern" deletable="false" movable="false" editable="false"></block>
+  </category>
+  <category name="Candle Analyze">
+    <block type="is_candle_black" deletable="false" movable="false" editable="false"></block>
+    <block type="make_a_list_of_candle_values" deletable="false" movable="false" editable="false">
+      <field name="candle_value_type">open</field>
+    </block>
+    <block type="read_values_from_candle" deletable="false" movable="false" editable="false">
+      <field name="candle_value_type">open</field>
+    </block>
+    <block type="in_candle_list_read" deletable="false" movable="false" editable="false">
+      <field name="candle_value_type">open</field>
+      <field name="interval_type">default</field>
+    </block>
+    <block type="in_candle_list_get_from_end" deletable="false" movable="false" editable="false">
+      <field name="interval_type">default</field>
+    </block>
+    <block type="candle_list_with_intervals" deletable="false" movable="false" editable="false">
+      <field name="interval_type">default</field>
+    </block>
+    <block type="candle_colors_with_intervals" deletable="false" movable="false" editable="false">
+      <field name="interval_type">default</field>
+    </block>
+    <block type="make_a_list_of_type_values_in_candle_list" deletable="false" movable="false" editable="false">
+      <field name="candle_type">open</field>
+      <field name="interval_type">default</field>
+    </block>
+  </category>
+  <category name="Indicators">
+    <block type="macd" deletable="false" movable="false" editable="false">
+      <field name="macd_type">histrogram</field>
+    </block>
+    <block type="relative_strength" deletable="false" movable="false" editable="false">
+      <field name="output_type">number</field>
+    </block>
+    <block type="boolinger_bands" deletable="false" movable="false" editable="false">
+      <field name="bands_type">upper</field>
+      <field name="output_type">number</field>
+    </block>
+    <block type="dochain_channels" deletable="false" movable="false" editable="false">
+      <field name="bands_type">upper</field>
+      <field name="output_type">number</field>
+    </block>
+    <block type="simple_moving" deletable="false" movable="false" editable="false">
+      <field name="output_type">number</field>
+    </block>
+    <block type="exponential_moving" deletable="false" movable="false" editable="false">
+      <field name="output_type">number</field>
+    </block>
+    <block type="digit_stats" deletable="false" movable="false" editable="false"></block>
+    <block type="worm" deletable="false" movable="false" editable="false"></block>
+    <block type="trend" deletable="false" movable="false" editable="false"></block>
+    <block type="pivot_points" deletable="false" movable="false" editable="false">
+      <field name="type">r1</field>
+    </block>
+    <block type="worm_query" deletable="false" movable="false" editable="false">
+      <field name="type">h</field>
+      <field name="worm_variable" id="DbfF0?c[LX{aIiJDeG2n">Worm</field>
+    </block>
+    <block type="digit_query" deletable="false" movable="false" editable="false">
+      <field name="type">lf</field>
+    </block>
+  </category>
+  <sep></sep>
+  <category name="Advanced Features" colour="#000000">
+    <block type="virtual_hook_reset" deletable="false" movable="false" editable="false"></block>
+    <block type="virtual_hook_start_when" deletable="false" movable="false" editable="false">
+      <field name="type">l</field>
+    </block>
+    <block type="virtual_hook_query" deletable="false" movable="false" editable="false">
+      <field name="type">sw</field>
+    </block>
+    <block type="virtual_hook_change" deletable="false" movable="false" editable="false">
+      <field name="type">sw</field>
+    </block>
+    <block type="virtual_hook_change_status" deletable="false" movable="false" editable="false">
+      <field name="type">enable</field>
+    </block>
+    <block type="virtual_hook_token" deletable="false" movable="false" editable="false">
+      <field name="token">Deriv Token</field>
+    </block>
+    <block type="virtual_hook_change_account" deletable="false" movable="false" editable="false">
+      <field name="typr">main</field>
+    </block>
+  </category>
+  <category name="Misc.">
+    <block type="seconds_since_epoch" deletable="false" movable="false" editable="false"></block>
+    <block type="to_timestamp" deletable="false" movable="false" editable="false"></block>
+    <block type="run_after" deletable="false" movable="false" editable="false"></block>
+    <block type="balance" deletable="false" movable="false" editable="false">
+      <field name="type">string</field>
+    </block>
+    <block type="total_profit" deletable="false" movable="false" editable="false">
+      <field name="type">string</field>
+    </block>
+    <block type="number_of_runs" deletable="false" movable="false" editable="false"></block>
+    <block type="notify" deletable="false" movable="false" editable="false">
+      <field name="color">g</field>
+      <field name="sound">none</field>
+    </block>
+    <block type="notify_telegram" deletable="false" movable="false" editable="false"></block>
+    <block type="ignore"></block>
+  </category>
+</xml>

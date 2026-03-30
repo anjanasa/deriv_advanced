@@ -1,0 +1,350 @@
+/* ===========================
+   Blockly Custom Styling
+   Futuristic & Modern Theme
+   =========================== */
+
+/* Block & toolbox colors - sleek futuristic theme */
+:root {
+    --block-glow-color: var(--blockly-accent, #22d3ee);
+    --block-glow-hover: var(--blockly-accent);
+    --block-shadow-color: var(--blockly-accent-dim, rgba(34, 211, 238, 0.25));
+}
+
+/* ===========================
+   Block Appearance - Sleek Futuristic
+   =========================== */
+
+/* Main block - clean, minimal shadow */
+.blocklyPath {
+    stroke-width: 1px !important;
+    stroke: rgba(255, 255, 255, 0.06) !important;
+    filter: none;
+    transition: stroke 0.15s ease, stroke-width 0.15s ease;
+}
+
+/* Selected block - subtle cyan outline, no busy animation */
+.blocklySelected>.blocklyPath {
+    stroke: var(--block-glow-color) !important;
+    stroke-width: 2px !important;
+    filter: drop-shadow(0 0 6px var(--block-shadow-color));
+}
+
+/* Hover - light accent border */
+.blocklyDraggable:hover>.blocklyPath {
+    stroke: rgba(34, 211, 238, 0.3) !important;
+    stroke-width: 1.5px !important;
+}
+
+/* Block text - crisp, readable */
+.blocklyText {
+    font-family: var(--font-family, 'Inter'), sans-serif !important;
+    font-weight: 500 !important;
+    font-size: 12px !important;
+    fill: #c9d1d9 !important;
+}
+
+/* Field inputs on blocks */
+.blocklyEditableText>.blocklyText {
+    fill: #e6edf3 !important;
+    font-weight: 500 !important;
+}
+
+/* Input field backgrounds - when NOT selected/editing (matches .blocklyHtmlInput) */
+.blocklyEditableText rect,
+.blocklyField rect,
+.blocklyFieldRect,
+.blocklyFieldDropdown rect,
+.blocklyFieldNumber rect,
+.blocklyFieldText rect {
+    fill: #090b0f !important;
+}
+
+/* Empty value-input slots (Duration, Stake etc) - use dark fill not gray */
+.blocklyPathDark {
+    fill: #0d1117 !important;
+    fill-opacity: 1 !important;
+}
+
+/* Dropdown arrows */
+.blocklyArrowTop {
+    fill: rgba(255, 255, 255, 0.7) !important;
+}
+
+/* ===========================
+   Toolbox Styling
+   =========================== */
+
+/* Toolbox must scroll vertically but NOT clip the flyout horizontally */
+.blocklyToolboxDiv {
+    overflow-x: visible !important;
+    overflow-y: auto !important;
+}
+
+/* Toolbox categories - clean, minimal */
+.blocklyTreeRow {
+    height: 34px !important;
+    padding: 6px 12px !important;
+    border-radius: 4px;
+    margin: 2px 8px !important;
+    transition: background 0.15s ease;
+    font-family: 'Inter', sans-serif !important;
+    font-weight: 500 !important;
+    font-size: 12px !important;
+    color: #8b949e !important;
+    border-left: 2px solid transparent;
+}
+
+.blocklyTreeRow:hover {
+    background-color: rgba(255, 255, 255, 0.04) !important;
+    color: #c9d1d9 !important;
+}
+
+.blocklyTreeRowContentContainer {
+    display: flex;
+    align-items: center;
+}
+
+/* Selected category - subtle cyan accent */
+.blocklyTreeRow.blocklyTreeSelected {
+    background-color: rgba(34, 211, 238, 0.08) !important;
+    border-left-color: var(--block-glow-color) !important;
+    color: #e6edf3 !important;
+}
+
+/* Category icons - small dot */
+.blocklyTreeIcon {
+    width: 6px !important;
+    height: 6px !important;
+    border-radius: 50%;
+    margin-right: 10px;
+    background-color: #484f58 !important;
+}
+
+.blocklyTreeRow.blocklyTreeSelected .blocklyTreeIcon {
+    background-color: var(--block-glow-color) !important;
+}
+
+/* ===========================
+   Flyout Styling
+   =========================== */
+
+/* Flyout - clean, no blur (keeps it minimal) */
+.blocklyFlyout {
+    overflow-y: auto !important;
+    overflow-x: hidden !important;
+    -webkit-overflow-scrolling: touch;
+    touch-action: pan-y;
+    position: absolute;
+    height: 100% !important;
+    min-height: 0 !important;
+    contain: layout;
+    scrollbar-width: none !important;
+    -ms-overflow-style: none !important;
+}
+
+.blocklyFlyout::-webkit-scrollbar {
+    display: none !important;
+}
+
+/* Flyout SVG background */
+.blocklyFlyoutBackground {
+    height: 100% !important;
+    pointer-events: none !important;
+}
+
+/* Flyout content - prevent clipping, ensure full height for blocks */
+.blocklyFlyout .blocklyScrollableContent,
+.blocklyFlyout .blocklyBlockCanvas {
+    pointer-events: auto !important;
+}
+
+/* Hide Blockly's built-in flyout scrollbar (scroll still works via wheel/touch) */
+.blocklyFlyout .blocklyScrollbarVertical,
+.blocklyFlyout .blocklyScrollbarHandle,
+.blocklyFlyout .blocklyScrollbarBackground,
+.blocklyFlyout .blocklyScrollbar {
+    display: none !important;
+    visibility: hidden !important;
+    opacity: 0 !important;
+    pointer-events: none !important;
+}
+
+/* Prevent flyout from clipping blocks - full height, adequate width */
+.blocklyFlyout {
+    min-width: 260px !important;
+    max-height: 100% !important;
+}
+
+.blocklyFlyoutBackground,
+.blocklyFlyout .blocklyScrollableSvg {
+    min-height: 100% !important;
+}
+
+/* Flyout parent - ensure it fills available height */
+.blocklyToolboxDiv + .blocklyFlyout,
+.injectionDiv .blocklyFlyout {
+    top: 0 !important;
+    bottom: 0 !important;
+}
+
+/* ===========================
+   Connection Indicators
+   =========================== */
+
+/* Connection highlights */
+.blocklyHighlightedConnectionPath {
+    stroke: var(--block-glow-color) !important;
+    stroke-width: 4px !important;
+    filter: drop-shadow(0 0 4px var(--block-shadow-color));
+}
+
+/* Insertion marker - subtle */
+.blocklyInsertionMarker>.blocklyPath {
+    fill: var(--block-glow-color) !important;
+    fill-opacity: 0.2 !important;
+    stroke: var(--block-glow-color) !important;
+    stroke-width: 1.5px !important;
+}
+
+/* ===========================
+   Field Editors
+   =========================== */
+
+/* Dropdown menus - clean, minimal */
+.blocklyDropDownDiv {
+    background-color: #161b22 !important;
+    border: 1px solid rgba(255, 255, 255, 0.08) !important;
+    border-radius: 6px !important;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5) !important;
+}
+
+.blocklyMenuItem {
+    padding: 8px 14px !important;
+    font-family: var(--font-family, 'Inter'), sans-serif !important;
+    font-size: 12px !important;
+    color: #c9d1d9 !important;
+    transition: background 0.12s ease;
+}
+
+.blocklyMenuItem:hover {
+    background-color: rgba(34, 211, 238, 0.12) !important;
+}
+
+.blocklyMenuItemHighlight {
+    background-color: rgba(34, 211, 238, 0.15) !important;
+}
+
+/* Number/Text inputs - minimal */
+.blocklyHtmlInput {
+    background-color: #0d1117 !important;
+    border: 1px solid rgba(255, 255, 255, 0.1) !important;
+    border-radius: 4px !important;
+    color: #e6edf3 !important;
+    font-family: 'Inter', sans-serif !important;
+    font-size: 12px !important;
+    padding: 4px 8px !important;
+}
+
+.blocklyHtmlInput:focus {
+    border-color: var(--block-glow-color) !important;
+    outline: none !important;
+}
+
+/* ===========================
+   Context Menu
+   =========================== */
+
+.blocklyContextMenu {
+    background-color: #161b22 !important;
+    border: 1px solid rgba(255, 255, 255, 0.08) !important;
+    border-radius: 6px !important;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5) !important;
+}
+
+/* ===========================
+   Workspace Grid - subtle dots
+   =========================== */
+
+.blocklyMainBackground {
+    stroke: rgba(34, 211, 238, 0.05) !important;
+    stroke-width: 0.5 !important;
+}
+
+/* ===========================
+   Trash Can
+   =========================== */
+
+.blocklyTrash {
+    opacity: 0.9;
+}
+
+.blocklyTrash:hover {
+    opacity: 1;
+}
+
+/* ===========================
+   Zoom Controls
+   =========================== */
+
+.blocklyZoom {
+    opacity: 0.9;
+}
+
+/* ===========================
+   Smooth Animations
+   =========================== */
+
+.blocklyDraggable {
+    transition: transform 0.1s ease-out;
+}
+
+/* Shadow blocks (in flyout/toolbox) */
+.blocklyDraggable.blocklyDisabled>.blocklyPath {
+    fill-opacity: 0.7 !important;
+}
+
+/* ===========================
+   Block Shadows
+   =========================== */
+
+.blocklyPathDark {
+    fill-opacity: 0.3 !important;
+}
+
+/* ===========================
+   Performance Optimizations
+   =========================== */
+
+.blocklyBlockCanvas {
+    will-change: transform;
+}
+
+.blocklyBubbleCanvas {
+    will-change: transform;
+}
+
+/* ===========================
+   Responsive Scaling
+   =========================== */
+
+@media (max-width: 1400px) {
+    /* .blocklyToolboxDiv .blocklyBlockCanvas {
+        transform: scale(0.8);
+    } */
+
+    .blocklyText {
+        font-size: 11px !important;
+    }
+}
+
+/* ===========================
+   Custom Block Type Styling
+   =========================== */
+
+/* You can add specific styling for individual block types */
+/* Example: */
+/*
+.blocklyPath[data-block-type="trade_parameters"] {
+    fill: var(--block-trade-params) !important;
+}
+*/
