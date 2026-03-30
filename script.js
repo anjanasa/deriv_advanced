@@ -7,6 +7,7 @@ let accountBalances = {}; // Store balance for each account
 let globalMarketData = {}; // Store categorized market data for dynamic dropdowns
 let isCodePanelVisible = false;
 let selectedAccCurruncy = "USD"
+const subdata = {};
 
 let app_id = '35751';
 let socket = new WebSocket(`wss://ws.derivws.com/websockets/v3?app_id=${app_id}`);
@@ -192,6 +193,16 @@ function initBlockly() {
 
     if (event.name === 'second_market') {
         edit_third_dropdown(block, event.newValue);
+    }
+    if (event.name === 'third_market') {
+        //second_catogoryUpdate(block);
+        getContractForSymbols(block.getFieldValue('third_market'))
+        console.log(block.getFieldValue('third_market'), 'third market value updated');
+    }
+    if (event.name === 'frist_catogory') {
+        //second_catogoryUpdate(block);
+        console.log(block.getFieldValue('frist_catogory'), 'frist catogory value updated');
+        second_catogoryUpdate(block, block.getFieldValue('frist_catogory'));
     }
 });
 }
@@ -1017,19 +1028,106 @@ for (let i = 0; i < contracts.length; i++) {
   }
 }
 
-//console.log('contracts types fetched successfully')
+
+
+
+const sampledata = {};
+
+
+// Step 1: Group by category
+contracts.forEach(item => {
+  const category = item.contract_category;
+
+  if (!sampledata[category]) {
+    sampledata[category] = {};
+  }
+
+  // Step 2: Create pair key (group inside category)
+  const pairKey = item.contract_display.replace("Higher", "Higher")
+                                       .replace("Lower", "Lower"); // optional cleanup
+
+  // Better: group by contract_type pattern
+  let groupName;
+
+  if (item.contract_type.includes("DIGITMATCH") || item.contract_type.includes("DIGITDIFF")) {
+    groupName = "Digit Matches/Digit Differs";
+  } else if (item.contract_type.includes("DIGITODD") || item.contract_type.includes("DIGITEVEN")) {
+    groupName = "Digit Odd/Digit Even";
+  } else if (item.contract_type === "CALL" || item.contract_type === "PUT") {
+    groupName = "Higher/Lower";
+  } else if (item.contract_type === "CALLE" || item.contract_type === "PUTE") {
+    groupName = "Higher/Lower E";
+  } else if (item.contract_type === "MULTUP" || item.contract_type === "MULTDOWN") {
+    groupName = "Multiply Up/Multiply Down";
+  } else if (item.contract_type === "DIGITOVER" || item.contract_type === "DIGITUNDER") {
+    groupName = "Digit Over/Digit Under";
+  }
+   else {
+    groupName = item.contract_display;
+  }
+
+  if (!sampledata[category][groupName]) {
+    sampledata[category][groupName] = new Set();
+  }
+
+  sampledata[category][groupName].add(item.contract_type);
+});
+
+
+// Step 3: Convert to final format
+
+
+Object.entries(sampledata).forEach(([category, groups]) => {
+  subdata[category] = Object.entries(groups).map(([name, types]) => {
+    return [name, Array.from(types).join('/')];
+  });
+});
+
+
+//subContractTypes = subdata;
+
+console.log(subdata);
+
+
+
+
+console.log('contracts types fetched successfully')
+console.log(data)
 //console.log(result);
 mainContractTypes = result;
+let fristKey = Object.keys(subdata)[0];
+subContractTypes = subdata[fristKey];
 
 workspace.getBlocksByType('main_block').forEach(block => {
     const firstField = block.getField('frist_catogory');
+    const secondField = block.getField('second_catogory');
+    const firstValue = block.getFieldValue('frist_catogory');
     if (firstField) {
         firstField.menuGenerator_ = result;
         firstField.setValue(result[0][1]);
     }
+
+    if (secondField) {
+        subContractTypes = subdata[firstValue];
+        secondField.menuGenerator_ = subContractTypes;
+        secondField.setValue(subContractTypes[0][1]);
+    }
+
 });
 
+console.log(result)
 }
 
+
+function second_catogoryUpdate(block) {
+    const firstValue = block.getFieldValue('frist_catogory');
+    const secondField = block.getField('second_catogory');
+    if (secondField) {
+        let data = subdata[firstValue];
+        console.log(subdata, firstValue)
+        secondField.menuGenerator_ = data;
+        secondField.setValue(data[0][1]);
+    }
+}
 
 //second 
