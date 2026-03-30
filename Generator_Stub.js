@@ -490,7 +490,7 @@ javascript.javascriptGenerator.forBlock['main_block'] = function(block, generato
   let selected_market = ${dropdown_third_market}
   let trading_cat = ${dropdown_contract_type}
   let candle_interval = ${dropdown_candle_interval}
-
+  final cat = ${dropdown_second_catogory}
   `;
   return code;
 };

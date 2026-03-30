@@ -1061,6 +1061,8 @@ contracts.forEach(item => {
     groupName = "Multiply Up/Multiply Down";
   } else if (item.contract_type === "DIGITOVER" || item.contract_type === "DIGITUNDER") {
     groupName = "Digit Over/Digit Under";
+  } else if (item.contract_type === "ASIANU" || item.contract_type === "ASIAND") {
+    groupName = "Asian Up/Asian Down";
   }
    else {
     groupName = item.contract_display;
@@ -1086,13 +1088,13 @@ Object.entries(sampledata).forEach(([category, groups]) => {
 
 //subContractTypes = subdata;
 
-console.log(subdata);
+//console.log(subdata);
 
 
 
 
 console.log('contracts types fetched successfully')
-console.log(data)
+//console.log(data)
 //console.log(result);
 mainContractTypes = result;
 let fristKey = Object.keys(subdata)[0];
@@ -1115,7 +1117,7 @@ workspace.getBlocksByType('main_block').forEach(block => {
 
 });
 
-console.log(result)
+//console.log(result)
 }
 
 
@@ -1124,7 +1126,7 @@ function second_catogoryUpdate(block) {
     const secondField = block.getField('second_catogory');
     if (secondField) {
         let data = subdata[firstValue];
-        console.log(subdata, firstValue)
+        //console.log(subdata, firstValue)
         secondField.menuGenerator_ = data;
         secondField.setValue(data[0][1]);
     }
