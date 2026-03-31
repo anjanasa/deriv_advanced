@@ -471,18 +471,18 @@ javascript.javascriptGenerator.forBlock['notify'] = function(block, generator) {
 };
 
 javascript.javascriptGenerator.forBlock['main_block'] = function(block, generator) {
-  var dropdown_frist_market = block.getFieldValue('frist_market');
+  var dropdown_first_market = block.getFieldValue('first_market');
   var dropdown_second_market = block.getFieldValue('second_market');
   var dropdown_third_market = block.getFieldValue('third_market');
-  var dropdown_frist_catogory = block.getFieldValue('frist_catogory');
-  var dropdown_second_catogory = block.getFieldValue('second_catogory');
+  var dropdown_first_category = block.getFieldValue('first_category');
+  var dropdown_second_category = block.getFieldValue('second_category');
   var dropdown_contract_type = block.getFieldValue('contract_type');
   var dropdown_candle_interval = block.getFieldValue('candle_interval');
-  var checkbox_buysellerror = block.getFieldValue('buysellError') === 'TRUE';
-  var checkbox_lasttradeoferror = block.getFieldValue('lasttradeofError') === 'TRUE';
-  var statements_run_onece = generator.statementToCode(block, 'run_onece');
+  var checkbox_buy_sell_error = block.getFieldValue('buySellError') === 'TRUE';
+  var checkbox_last_trade_on_error = block.getFieldValue('lastTradeOnError') === 'TRUE';
+  var statements_run_once = generator.statementToCode(block, 'run_once');
   var statements_trade_options = generator.statementToCode(block, 'trade_options');
-  var statements_watch_purches = generator.statementToCode(block, 'watch_purches');
+  var statements_watch_purchase = generator.statementToCode(block, 'watch_purchase');
   var statements_watch_sell = generator.statementToCode(block, 'watch_sell');
   var statements_trade_again = generator.statementToCode(block, 'trade_again');
   // TODO: Assemble javascript into code variable.
@@ -490,7 +490,7 @@ javascript.javascriptGenerator.forBlock['main_block'] = function(block, generato
   let selected_market = ${dropdown_third_market}
   let trading_cat = ${dropdown_contract_type}
   let candle_interval = ${dropdown_candle_interval}
-  final cat = ${dropdown_second_catogory}
+  let final_cat = ${dropdown_second_category}
   `;
   return code;
 };

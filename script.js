@@ -1,508 +1,455 @@
 /* ─── Global Variables ─────────────────────────────────────────────────── */
+'use strict';
+
 let workspace = null;
-let accountList = []; 
+let accountList = [];
 let lastModifiedTime = 'Never';
 let currentAccountIndex = 0;
-let accountBalances = {}; // Store balance for each account
-let globalMarketData = {}; // Store categorized market data for dynamic dropdowns
+let accountBalances = {};        // balance per loginid
+let globalMarketData = {};       // categorized open-market data
 let isCodePanelVisible = false;
-let selectedAccCurruncy = "USD"
-const subdata = {};
+let selectedAccountCurrency = 'USD';
+const subdata = {};              // contract sub-categories built from contracts_for
 
-let app_id = '35751';
-let socket = new WebSocket(`wss://ws.derivws.com/websockets/v3?app_id=${app_id}`);
-let isLoadingScreenVisible = true;
+const APP_ID = '35751';
+const WS_URL = `wss://ws.derivws.com/websockets/v3?app_id=${APP_ID}`;
 
-// Ping tracking variables
+let socket = null;
+let pingIntervalId = null;
 let pingSentTime = null;
 let previousPing = null;
+let isLoadingScreenVisible = true;
+let isReconnecting = false;
 
-/* ─── Blockly Theme & Block Override ────────────────────────────────────── */
+/* ─── Blockly Dynamic Dropdown Data ─────────────────────────────────────── */
+const PLACEHOLDER_OPTIONS = [['Loading…', 'LOADING']];
+
+let currentMarketOptions  = [...PLACEHOLDER_OPTIONS];
+let secondMarketData      = [...PLACEHOLDER_OPTIONS];
+let thirdMarketData       = [...PLACEHOLDER_OPTIONS];
+let mainContractTypes     = [...PLACEHOLDER_OPTIONS];
+let subContractTypes      = [...PLACEHOLDER_OPTIONS];
+
+/* ─── Blockly Theme ──────────────────────────────────────────────────────── */
 const rootStyles = getComputedStyle(document.documentElement);
-let THEME_CATEGORY_COLOR = rootStyles.getPropertyValue('--toolbox-category-color').trim() || '#04db81';
+const THEME_CATEGORY_COLOR = rootStyles.getPropertyValue('--toolbox-category-color').trim() || '#04db81';
 
-// This variable can be updated from anywhere in your script
-let currentMarketOptions = [
-  ["Initial Option", "OPTIONNAME"],
-  ["Another Option", "OPTIONNAME2"]
-];
-let secondMarketData = [
-      ["Initial Option", "OPTIONNAME"],
-  ["Another Option", "OPTIONNAME2"]
-]
-let thirdMarketData = [
-      ["Initial Option", "OPTIONNAME"],
-  ["Another Option", "OPTIONNAME2"]
-]
-
-
-let mainContractTypes = [      
-    ["Initial Option", "OPTIONNAME"],
-    ["Another Option", "OPTIONNAME2"]
-]
-let subContractTypes = [      
-    ["Initial Option", "OPTIONNAME"],
-    ["Another Option", "OPTIONNAME2"]
-]
-
-// Example function to update the list from outside
-function updateMarketList(newList) {
-  currentMarketOptions = newList;
-}
-
-
+/* ─── Main Block Definition ──────────────────────────────────────────────── */
 Blockly.Blocks['main_block'] = {
-  init: function() {
-    this.appendDummyInput()
-        .appendField("(1) Define your trade Contract");
-    this.appendDummyInput()
-        .appendField("Market")
-        .appendField(new Blockly.FieldDropdown(() => {
-          return currentMarketOptions;
-        }), "frist_market")
-        .appendField(">")
-        .appendField(new Blockly.FieldDropdown(() => {
-          return secondMarketData}), "second_market")
-        .appendField(">")
-        .appendField(new Blockly.FieldDropdown(() => {
-          return thirdMarketData}), "third_market");
-    this.appendDummyInput()
-        .appendField("Trade Type")
-        .appendField(new Blockly.FieldDropdown(() => {
-          return mainContractTypes}), "frist_catogory")
-        .appendField(">")
-        .appendField(new Blockly.FieldDropdown(() => {
-          return subContractTypes}), "second_catogory");
-    this.appendDummyInput()
-        .appendField("Contract Type")
-        .appendField(new Blockly.FieldDropdown([["Both","both"], ["Single","single"]]), "contract_type");
-    this.appendDummyInput()
-        .appendField("Default Candle Interval")
-        .appendField(new Blockly.FieldDropdown([["1 Minute","1m"], ["2 Minute","2m"], ["3 Minute","3m"], ["5 Minute","5m"], ["10 Minute","10m"], ["15 Minute","15m"], ["30 Minute","30m"], ["1 Hour","1h"], ["2 Hour","2h"], ["4 Hour","4h"], ["8 Hour","8h"], ["1 Day","1d"]]), "candle_interval");
-    this.appendDummyInput()
-        .appendField("Restart Buy Sell On Error  (Disable For Better Performance)")
-        .appendField(new Blockly.FieldCheckbox("FALSE"), "buysellError");
-    this.appendDummyInput()
-        .appendField("Restart Last Trade On Error  (Bot Ignores Unsuccessful Trades)")
-        .appendField(new Blockly.FieldCheckbox("TRUE"), "lasttradeofError");
-    this.appendDummyInput()
-        .appendField("Run Once at Start");
-    this.appendStatementInput("run_onece")
-        .setCheck(null);
-    this.appendDummyInput()
-        .appendField("Define Trade Options");
-    this.appendStatementInput("trade_options")
-        .setCheck(null);
-    this.appendDummyInput()
-        .appendField("(2) Watch and Purchase your Contract");
-    this.appendStatementInput("watch_purches")
-        .setCheck(null);
-    this.appendDummyInput()
-        .appendField("(3) Watch and Sell your Perchased Contract");
-    this.appendStatementInput("watch_sell")
-        .setCheck(null);
-    this.appendDummyInput()
-        .appendField("(4) Get your Trade Result and Trade Again");
-    this.appendStatementInput("trade_again")
-        .setCheck(null);
-    this.setInputsInline(false);
-    this.setColour(230);
- this.setTooltip("");
- this.setHelpUrl("");
-  }
+    init() {
+        this.appendDummyInput()
+            .appendField('(1) Define your trade Contract');
+        this.appendDummyInput()
+            .appendField('Market')
+            .appendField(new Blockly.FieldDropdown(() => currentMarketOptions), 'first_market')
+            .appendField('>')
+            .appendField(new Blockly.FieldDropdown(() => secondMarketData), 'second_market')
+            .appendField('>')
+            .appendField(new Blockly.FieldDropdown(() => thirdMarketData), 'third_market');
+        this.appendDummyInput()
+            .appendField('Trade Type')
+            .appendField(new Blockly.FieldDropdown(() => mainContractTypes), 'first_category')
+            .appendField('>')
+            .appendField(new Blockly.FieldDropdown(() => subContractTypes), 'second_category');
+        this.appendDummyInput()
+            .appendField('Contract Type')
+            .appendField(new Blockly.FieldDropdown([
+                ['Both',   'both'],
+                ['Single', 'single']
+            ]), 'contract_type');
+        this.appendDummyInput()
+            .appendField('Default Candle Interval')
+            .appendField(new Blockly.FieldDropdown([
+                ['1 Minute',  '1m'],  ['2 Minute',  '2m'],  ['3 Minute',  '3m'],
+                ['5 Minute',  '5m'],  ['10 Minute', '10m'], ['15 Minute', '15m'],
+                ['30 Minute', '30m'], ['1 Hour',    '1h'],  ['2 Hour',    '2h'],
+                ['4 Hour',    '4h'],  ['8 Hour',    '8h'],  ['1 Day',     '1d']
+            ]), 'candle_interval');
+        this.appendDummyInput()
+            .appendField('Restart Buy/Sell On Error  (Disable For Better Performance)')
+            .appendField(new Blockly.FieldCheckbox('FALSE'), 'buySellError');
+        this.appendDummyInput()
+            .appendField('Restart Last Trade On Error  (Bot Ignores Unsuccessful Trades)')
+            .appendField(new Blockly.FieldCheckbox('TRUE'), 'lastTradeOnError');
+        this.appendDummyInput()
+            .appendField('Run Once at Start');
+        this.appendStatementInput('run_once').setCheck(null);
+        this.appendDummyInput()
+            .appendField('Define Trade Options');
+        this.appendStatementInput('trade_options').setCheck(null);
+        this.appendDummyInput()
+            .appendField('(2) Watch and Purchase your Contract');
+        this.appendStatementInput('watch_purchase').setCheck(null);
+        this.appendDummyInput()
+            .appendField('(3) Watch and Sell your Purchased Contract');
+        this.appendStatementInput('watch_sell').setCheck(null);
+        this.appendDummyInput()
+            .appendField('(4) Get your Trade Result and Trade Again');
+        this.appendStatementInput('trade_again').setCheck(null);
+        this.setInputsInline(false);
+        this.setColour(230);
+        this.setTooltip('');
+        this.setHelpUrl('');
+    }
 };
 
-/* ─── Initialize Blockly Function ────────────────────────────────────────── */
+/* ─── Initialize Blockly ─────────────────────────────────────────────────── */
 function initBlockly() {
     const container = document.querySelector('.blockly-container');
     if (!container) {
-        console.error('blockly-container not found');
+        console.error('[Blockly] .blockly-container not found');
         return;
     }
 
     const toolboxXml = document.getElementById('toolbox');
+    if (!toolboxXml) {
+        console.error('[Blockly] #toolbox element not found');
+        return;
+    }
 
     const premiumTheme = Blockly.Theme.defineTheme('premiumTheme', {
         base: Blockly.Themes.Classic,
         componentStyles: {
             workspaceBackgroundColour: '#060910',
-            toolboxBackgroundColour: '#0d1117',
-            toolboxForegroundColour: '#8b949e',
-            flyoutBackgroundColour: 'rgba(13, 17, 23, 0.97)',
-            insertionMarkerColour: '#22d3ee',
-            scrollbarColour: 'rgba(34, 211, 238, 0.2)',
+            toolboxBackgroundColour:   '#0d1117',
+            toolboxForegroundColour:   '#8b949e',
+            flyoutBackgroundColour:    'rgba(13, 17, 23, 0.97)',
+            insertionMarkerColour:     '#22d3ee',
+            scrollbarColour:           'rgba(34, 211, 238, 0.2)',
         },
         blockStyles: {
-            'premium_dark': {
-                'colourPrimary': '#161b22',
-                'colourSecondary': '#0d1117',
-                'colourTertiary': '#21262d'
+            premium_dark: {
+                colourPrimary:   '#161b22',
+                colourSecondary: '#0d1117',
+                colourTertiary:  '#21262d'
             }
         }
     });
 
     workspace = Blockly.inject(container, {
-        toolbox: toolboxXml,
-        renderer: 'thrasos',
-        theme: premiumTheme,
-        grid: { spacing: 25, length: 3, colour: 'rgba(4, 219, 129, 0.05)', snap: true },
-        move: { scrollbars: true, drag: true, wheel: true },
-        zoom: { wheel: true, startScale: 1.0, maxScale: 3, minScale: 0.3, scaleSpeed: 1.2 }
+        toolbox:   toolboxXml,
+        renderer:  'thrasos',
+        theme:     premiumTheme,
+        grid:      { spacing: 25, length: 3, colour: 'rgba(4, 219, 129, 0.05)', snap: true },
+        move:      { scrollbars: true, drag: true, wheel: true },
+        zoom:      { wheel: true, startScale: 1.0, maxScale: 3, minScale: 0.3, scaleSpeed: 1.2 }
     });
 
+    // Keep Blockly canvas in sync with container size changes
     const resizeObserver = new ResizeObserver(() => Blockly.svgResize(workspace));
     resizeObserver.observe(container);
 
-    workspace.addChangeListener((event) => {
-        trackBlockChanges(event);
-        updateStats();
-        if (isCodePanelVisible) {
-            updateGeneratedCode();
-        }
-    });
-
-    console.log('Blockly workspace initialised ✓');
+    // Single consolidated change listener
+    workspace.addChangeListener(onWorkspaceChange);
 
     enforceSingleMainBlock(workspace);
 
-
-
-
-
-    workspace.addChangeListener(function(event) {
-            const block = workspace.getBlockById(event.blockId);
-            try {
-                var secondmarketvalue = block.getFieldValue('second_market');
-                if(block.type === 'main_block' && secondmarketvalue === "OPTIONNAME"){
-                    console.log("main_block initilizing occord");
-                    var data = block.getFieldValue('frist_market');
-                    edit_second_dropdown(block, data);
-                }
-            } catch (error) {
-                
-            }
-
-
-    if (event.type !== Blockly.Events.CHANGE || event.element !== 'field') return;
-
-    if (!block || block.type !== 'main_block') return;
-
-    if (event.name === 'frist_market') {
-        edit_second_dropdown(block, event.newValue);
-    }
-
-    if (event.name === 'second_market') {
-        edit_third_dropdown(block, event.newValue);
-    }
-    if (event.name === 'third_market') {
-        //second_catogoryUpdate(block);
-        getContractForSymbols(block.getFieldValue('third_market'))
-        console.log(block.getFieldValue('third_market'), 'third market value updated');
-    }
-    if (event.name === 'frist_catogory') {
-        //second_catogoryUpdate(block);
-        console.log(block.getFieldValue('frist_catogory'), 'frist catogory value updated');
-        second_catogoryUpdate(block, block.getFieldValue('frist_catogory'));
-    }
-});
+    console.log('[Blockly] Workspace initialised ✓');
 }
 
-/* ─── WebSocket & Login Logic ───────────────────────────────────────────── */
+/**
+ * Unified workspace change listener – replaces the two separate listeners
+ * that existed previously, eliminating duplicate event handling.
+ */
+function onWorkspaceChange(event) {
+    // --- Stats & code panel (always run) ---
+    trackBlockChanges(event);
+    updateStats();
+    if (isCodePanelVisible) updateGeneratedCode();
 
-function callingWebSocket() {
+    // --- Dropdown cascade (only on field changes) ---
+    const block = workspace.getBlockById(event.blockId);
+    if (!block || block.type !== 'main_block') return;
+
+    // Auto-initialise second dropdown when the block is first created / loaded
+    if (event.type !== Blockly.Events.CHANGE || event.element !== 'field') {
+        try {
+            const secondValue = block.getFieldValue('second_market');
+            if (secondValue === 'LOADING' || secondValue === 'OPTIONNAME') {
+                const firstValue = block.getFieldValue('first_market');
+                if (firstValue && globalMarketData[firstValue]) {
+                    updateSecondDropdown(block, firstValue);
+                }
+            }
+        } catch (_) { /* block may not have these fields yet */ }
+        return;
+    }
+
+    switch (event.name) {
+        case 'first_market':
+            updateSecondDropdown(block, event.newValue);
+            break;
+        case 'second_market':
+            updateThirdDropdown(block, event.newValue);
+            break;
+        case 'third_market':
+            console.log('[Market] Third market changed to:', event.newValue);
+            getContractForSymbol(event.newValue);
+            break;
+        case 'first_category':
+            console.log('[Contract] First category changed to:', event.newValue);
+            updateSecondCategoryDropdown(block, event.newValue);
+            break;
+        default:
+            break;
+    }
+}
+
+/* ─── WebSocket ──────────────────────────────────────────────────────────── */
+
+/** Create (or recreate) the WebSocket and attach handlers. */
+function connectWebSocket() {
+    if (socket && socket.readyState === WebSocket.OPEN) return; // already open
+
+    socket = new WebSocket(WS_URL);
+    isReconnecting = false;
+
     socket.onopen = () => {
-        console.log('WebSocket connection established');
-        
-        // Hide loading screen once WebSocket is connected
+        console.log('[WS] Connection established');
         hideLoadingScreen();
-        
-        // Wait 1s then check URL for credentials
-        setTimeout(() => {
-            getCurrentURL();
-        }, 1000);
 
-        // Standard Ping interval
-        setInterval(() => {
+        // Start ping heartbeat
+        if (pingIntervalId) clearInterval(pingIntervalId);
+        pingIntervalId = setInterval(() => {
             if (socket.readyState === WebSocket.OPEN) {
                 pingSentTime = Date.now();
                 socket.send(JSON.stringify({ ping: 1 }));
             }
         }, 1000);
+
+        // Give DOM a moment then parse credentials from URL
+        setTimeout(parseAccountsFromURL, 1000);
     };
 
-    socket.onclose = () => {
-        console.log('WebSocket connection closed');
-        // Show error on loading screen if still visible
+    socket.onclose = (evt) => {
+        console.warn('[WS] Connection closed:', evt.code, evt.reason);
+        clearInterval(pingIntervalId);
+
         if (isLoadingScreenVisible) {
-            const loadingSubtitle = document.querySelector('.loading-subtitle');
-            if (loadingSubtitle) {
-                loadingSubtitle.textContent = 'Connection lost. Please refresh the page.';
-                loadingSubtitle.style.color = 'var(--red-color)';
-            }
+            setLoadingMessage('Connection lost. Reconnecting…', 'var(--red-color)');
+        }
+
+        // Auto-reconnect with back-off (5 s)
+        if (!isReconnecting) {
+            isReconnecting = true;
+            setTimeout(connectWebSocket, 5000);
         }
     };
 
-    socket.onerror = (error) => {
-        console.error('WebSocket error:', error);
-        // Show error on loading screen if still visible
+    socket.onerror = (err) => {
+        console.error('[WS] Error:', err);
         if (isLoadingScreenVisible) {
-            const loadingSubtitle = document.querySelector('.loading-subtitle');
-            if (loadingSubtitle) {
-                loadingSubtitle.textContent = 'Connection error. Please check your internet.';
-                loadingSubtitle.style.color = 'var(--red-color)';
-            }
+            setLoadingMessage('Connection error. Please check your internet.', 'var(--red-color)');
             showError('WebSocket connection failed. Please check your internet connection.');
         }
     };
 
-    socket.onmessage = (event) => {
-        const data = JSON.parse(event.data);
-        if (data.msg_type === 'authorize') {
-            if (data.error) {
-                showError(data.error.message || 'Authorization failed');
-                document.querySelector('.login').style.display = 'flex'; // Show login on error
-            } else {
-                after_authorized(data); // Hide login on success
-                getActiveMarkets()
-            }
-        }
-
-        // Handle balance response
-        if (data.msg_type === 'balance' && data.balance) {
-            const accountLoginid = data.balance.loginid;
-            const balance = data.balance.balance;
-            selectedAccCurruncy = data.balance.currency
-            const currency = data.balance.currency || 'USD';
-            
-            // Store balance for this account
-            accountBalances[accountLoginid] = `$${parseFloat(balance).toFixed(2)}`;
-            
-            //console.log(`Balance for ${accountLoginid}: ${accountBalances[accountLoginid]}`);
-            
-            // Update display if this is the current account
-            if (accountList[currentAccountIndex] && accountList[currentAccountIndex].account === accountLoginid) {
-                updateAccountDisplay();
-            }
-        }
-
-        if (data.msg_type === 'ping') {
-            if (pingSentTime) {
-                const currentPing = Date.now() - pingSentTime;
-                //console.log(`Ping: ${currentPing}ms`);
-                const pingDiv = document.querySelector('.ping');
-                if (pingDiv) {
-                    let arrowHtml = '';
-                    if (previousPing !== null) {
-                        if (currentPing > previousPing) {
-                            arrowHtml = '<span style="color: red; margin-left: 5px;">&#9650;</span>'; // Red up triangle
-                        } else if (currentPing < previousPing) {
-                            arrowHtml = '<span style="color: green; margin-left: 5px;">&#9660;</span>'; // Green down triangle
-                        } else {
-                            arrowHtml = '<span style="color: gray; margin-left: 5px;">-</span>'; // unchanged
-                        }
-                    }
-                    pingDiv.innerHTML = `Ping: ${currentPing}ms ${arrowHtml}`;
-                    previousPing = currentPing;
-                }
-            }
-        }
-
-        if (data.msg_type === 'active_symbols') {
-            processActiveSymbols(data);
-        }
-        if (data.msg_type === 'asset_index') {
-            //console.log('assest index reciving', data)
-            //getAssetsWithMrket(data);
-        }
-        if (data.msg_type === 'contracts_for') {
-            //console.log('Contract data Reciving')
-            //console.log(data.contracts_for.available);
-            processContractsFor(data)
-            //initBlockly()
-        }
-    };
+    socket.onmessage = handleSocketMessage;
 }
 
+/** Route incoming WebSocket messages to the appropriate handler. */
+function handleSocketMessage(event) {
+    let data;
+    try {
+        data = JSON.parse(event.data);
+    } catch (err) {
+        console.error('[WS] Failed to parse message:', err);
+        return;
+    }
 
+    // API-level error check (applies to most message types)
+    if (data.error) {
+        const ctx = data.msg_type || 'unknown';
+        console.error(`[WS] API error (${ctx}):`, data.error.message);
+        // Let individual handlers decide if they need to show UI feedback
+    }
 
-function getCurrentURL() {
-    // YOUR SAMPLE URL
-    const SAMPLE_URL = "https://binarylab.rf.gd/?acct1=CR2697040&token1=a1-qTVkA8wuwrwuC12TBl4G45sXHKdoU&cur1=USD&acct2=CR2932882&token2=a1-7krHsKJJaXLgRXKW2kdC3izD50M43&cur2=USDC&acct3=VRTC4545708&token3=a1-CTd8UkEJHdJPxBWnZMQWbdxW9HlgJ&cur3=USD";
-    const currentUrl = window.location.href;
-    const url = new URL(SAMPLE_URL); 
-    const params = url.searchParams;
-    
-    accountList = []; 
+    switch (data.msg_type) {
+        case 'authorize':      handleAuthorize(data);        break;
+        case 'balance':        handleBalance(data);          break;
+        case 'ping':           handlePing();                 break;
+        case 'active_symbols': processActiveSymbols(data);   break;
+        case 'contracts_for':  processContractsFor(data);    break;
+        default:
+            // Silently ignore message types we don't handle
+            break;
+    }
+}
+
+function handleAuthorize(data) {
+    if (data.error) {
+        showError(data.error.message || 'Authorization failed');
+        const loginDiv = document.querySelector('.login');
+        if (loginDiv) loginDiv.style.display = 'flex';
+        return;
+    }
+    afterAuthorized(data);
+    getActiveMarkets();
+}
+
+function handleBalance(data) {
+    if (!data.balance) return;
+    const { loginid, balance, currency = 'USD' } = data.balance;
+    selectedAccountCurrency = currency;
+    accountBalances[loginid] = `${currency} ${parseFloat(balance).toFixed(2)}`;
+
+    if (accountList[currentAccountIndex]?.account === loginid) {
+        updateAccountDisplay();
+    }
+}
+
+function handlePing() {
+    if (pingSentTime === null) return;
+    const currentPing = Date.now() - pingSentTime;
+    const pingDiv = document.querySelector('.ping');
+    if (!pingDiv) return;
+
+    let arrowHtml = '';
+    if (previousPing !== null) {
+        if (currentPing > previousPing) {
+            arrowHtml = '<span style="color:red;margin-left:5px">&#9650;</span>';
+        } else if (currentPing < previousPing) {
+            arrowHtml = '<span style="color:green;margin-left:5px">&#9660;</span>';
+        } else {
+            arrowHtml = '<span style="color:gray;margin-left:5px">&#8211;</span>';
+        }
+    }
+    pingDiv.innerHTML = `Ping: ${currentPing}ms ${arrowHtml}`;
+    previousPing = currentPing;
+}
+
+/* ─── URL / Login ────────────────────────────────────────────────────────── */
+// NOTE: Replace SAMPLE_URL with `window.location.href` once the page is hosted
+const SAMPLE_URL =
+    'https://binarylab.rf.gd/?acct1=CR2697040&token1=a1-qTVkA8wuwrwuC12TBl4G45sXHKdoU&cur1=USD' +
+    '&acct2=CR2932882&token2=a1-7krHsKJJaXLgRXKW2kdC3izD50M43&cur2=USDC' +
+    '&acct3=VRTC4545708&token3=a1-CTd8UkEJHdJPxBWnZMQWbdxW9HlgJ&cur3=USD';
+
+function parseAccountsFromURL() {
+    let params;
+    try {
+        params = new URL(SAMPLE_URL).searchParams;
+    } catch (err) {
+        console.error('[Auth] Invalid URL:', err);
+        showLoginScreen();
+        return;
+    }
+
+    accountList = [];
     let i = 1;
-
     while (params.has(`acct${i}`)) {
         accountList.push({
-            account: params.get(`acct${i}`),
-            token: params.get(`token${i}`),
-            currency: params.get(`cur${i}`)
+            account:  params.get(`acct${i}`),
+            token:    params.get(`token${i}`),
+            currency: params.get(`cur${i}`) || 'USD'
         });
         i++;
     }
 
-    const loginDiv = document.querySelector('.login');
-
     if (accountList.length === 0) {
-        console.log('No accounts in URL, showing login screen');
-        // Only show login screen after WebSocket is connected and no credentials found
-        if (loginDiv) loginDiv.style.display = 'flex';
+        console.log('[Auth] No accounts in URL — showing login screen');
+        showLoginScreen();
     } else {
-        console.log('Accounts found, authorizing first account...');
-        const firstAccount = accountList[0];
-        // Send proper authorization object
-        socket.send(JSON.stringify({ "authorize": firstAccount.token }));
+        console.log(`[Auth] Found ${accountList.length} account(s). Authorising…`);
+        sendWS({ authorize: accountList[0].token });
     }
-    //console.log('Account list:', accountList);
+}
+
+function showLoginScreen() {
+    const loginDiv = document.querySelector('.login');
+    if (loginDiv) loginDiv.style.display = 'flex';
 }
 
 function loginWithToken(token) {
-    if (!token) {
-        showError('Please enter a token');
+    if (!token || !token.trim()) {
+        showError('Please enter a valid token');
         return;
     }
-    
-    // Store token as a temporary account entry
-    const tempAccount = {
-        account: 'Token Login',
-        token: token,
-        currency: 'USD'
-    };
-    
-    // Check if we already have this token
+    token = token.trim();
+
+    // Reuse existing entry if token already known
     const existingIndex = accountList.findIndex(acc => acc.token === token);
-    
-    if (existingIndex === -1) {
-        // Add new account
-        accountList.push(tempAccount);
-        currentAccountIndex = accountList.length - 1;
-    } else {
-        // Use existing account
+    if (existingIndex !== -1) {
         currentAccountIndex = existingIndex;
+    } else {
+        accountList.push({ account: 'Token Login', token, currency: 'USD' });
+        currentAccountIndex = accountList.length - 1;
     }
-    
-    showInfo('Attempting authorization...');
-    socket.send(JSON.stringify({ "authorize": token }));
+
+    showInfo('Attempting authorization…');
+    sendWS({ authorize: token });
 }
 
-function after_authorized(data) {
-    console.log('Authorized successfully!');
-    
-    // Get account info from authorization response
+function afterAuthorized(data) {
+    console.log('[Auth] Authorized successfully');
+
     if (data.authorize) {
-        const accountLoginid = data.authorize.loginid;
-        const currency = data.authorize.currency || 'USD';
-        
-        // Update current account with real account ID
-        if (accountList.length > 0 && currentAccountIndex < accountList.length) {
-            const currentAccount = accountList[currentAccountIndex];
-            
-            // If this was a token login with placeholder name, update it
-            if (currentAccount.account === 'Token Login' || !currentAccount.account) {
-                currentAccount.account = accountLoginid;
-                currentAccount.currency = currency;
-                console.log('Updated account:', accountLoginid);
-            }
+        const { loginid, currency = 'USD' } = data.authorize;
+        const current = accountList[currentAccountIndex];
+        if (current && (!current.account || current.account === 'Token Login')) {
+            current.account  = loginid;
+            current.currency = currency;
         }
     }
-    
-    // Hide the login screen (if it was shown)
+
     const loginDiv = document.querySelector('.login');
     if (loginDiv) loginDiv.style.display = 'none';
-        
-    // Update account display
+
     updateAccountDisplay();
-    
-    // Fetch balance after a short delay
-    setTimeout(() => {
-        fetchAccountBalance();
-    }, 500);
-    
-    if (accountList.length > 0) {
-        //showSuccess('Authorized successfully via URL', 2000);
-    } else {
-        //showSuccess('Authorized successfully via Token', 2000);
-    }
+    setTimeout(fetchAccountBalance, 500);
     showSuccess('Authorized successfully', 2000);
-
 }
 
-/* ─── Stats & Tracking ──────────────────────────────────────────────────── */
+/* ─── Account UI ─────────────────────────────────────────────────────────── */
 
-// Hide loading screen when WebSocket connects successfully
-function hideLoadingScreen() {
-    if (isLoadingScreenVisible) {
-        const loadingScreen = document.getElementById('loadingScreen');
-        if (loadingScreen) {
-            loadingScreen.classList.add('hidden');
-            isLoadingScreenVisible = false;
-            
-            // Remove from DOM after animation completes
-            setTimeout(() => {
-                loadingScreen.style.display = 'none';
-            }, 600); // Match the fadeOut animation duration
-        }
-    }
-}
-
-// Update account display in top bar
 function updateAccountDisplay() {
     const accountDisplay = document.getElementById('accountDisplay');
-    const connectBtn = document.getElementById('connectAccountBtn');
-    
-    if (accountList.length > 0 && currentAccountIndex < accountList.length) {
-        const currentAccount = accountList[currentAccountIndex];
-        const balance = accountBalances[currentAccount.account] || '$0.00';
-        
-        // Show account display, hide connect button
-        document.getElementById('currentAccountName').textContent = currentAccount.account;
-        document.getElementById('currentAccountBalance').textContent = balance;
-        document.getElementById('currentAccountBadge').textContent = currentAccount.account;
-        
+    const connectBtn     = document.getElementById('connectAccountBtn');
+    const hasAccount     = accountList.length > 0 && currentAccountIndex < accountList.length;
+
+    if (hasAccount) {
+        const current = accountList[currentAccountIndex];
+        const balance = accountBalances[current.account] || '0.00';
+        document.getElementById('currentAccountName')?.textContent    !== undefined &&
+            (document.getElementById('currentAccountName').textContent    = current.account);
+        document.getElementById('currentAccountBalance')?.textContent !== undefined &&
+            (document.getElementById('currentAccountBalance').textContent = balance);
+        document.getElementById('currentAccountBadge')?.textContent   !== undefined &&
+            (document.getElementById('currentAccountBadge').textContent   = current.account);
         if (accountDisplay) accountDisplay.style.display = 'flex';
-        if (connectBtn) connectBtn.style.display = 'none';
+        if (connectBtn)     connectBtn.style.display     = 'none';
     } else {
-        // Show connect button if no accounts
         if (accountDisplay) accountDisplay.style.display = 'none';
-        if (connectBtn) connectBtn.style.display = 'block';
+        if (connectBtn)     connectBtn.style.display     = 'block';
     }
 }
 
-// Show account dropdown with all accounts
 function showAccountDropdown() {
-    const dropdown = document.getElementById('accountDropdown');
+    const dropdown    = document.getElementById('accountDropdown');
     const accountsList = document.getElementById('accountsList');
-    
     if (!dropdown || !accountsList) return;
-    
-    // Clear existing content
-    accountsList.innerHTML = '';
-    
+
     if (accountList.length === 0) {
         accountsList.innerHTML = `
             <div class="no-accounts">
-                <svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                    <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
-                    <circle cx="12" cy="7" r="4"></circle>
+                <svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24"
+                     fill="none" stroke="currentColor" stroke-width="2"
+                     stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/>
+                    <circle cx="12" cy="7" r="4"/>
                 </svg>
                 <p>No connected accounts</p>
-                <p style="font-size: 0.85rem; opacity: 0.7;">Please login to view accounts</p>
-            </div>
-        `;
+                <p style="font-size:0.85rem;opacity:0.7">Please login to view accounts</p>
+            </div>`;
     } else {
-        // Add each account
+        accountsList.innerHTML = '';
         accountList.forEach((account, index) => {
-            const balance = accountBalances[account.account] || '$0.00';
+            const balance  = accountBalances[account.account] || '0.00';
             const isActive = index === currentAccountIndex;
-            
-            const accountItem = document.createElement('div');
-            accountItem.className = 'account-item' + (isActive ? ' active' : '');
-            accountItem.onclick = () => switchAccount(index);
-            
-            accountItem.innerHTML = `
+            const item     = document.createElement('div');
+            item.className = `account-item${isActive ? ' active' : ''}`;
+            item.onclick   = () => switchAccount(index);
+            item.innerHTML = `
                 <div class="account-item-header">
                     <span class="account-item-badge">${account.account}</span>
                     <span class="account-item-type">${account.currency || 'USD'}</span>
@@ -514,164 +461,449 @@ function showAccountDropdown() {
                     </div>
                     <div class="account-detail">
                         <span class="account-detail-label">Token</span>
-                        <span class="account-detail-value">${account.token.substring(0, 8)}...</span>
+                        <span class="account-detail-value">${account.token.substring(0, 8)}…</span>
                     </div>
-                </div>
-            `;
-            
-            accountsList.appendChild(accountItem);
+                </div>`;
+            accountsList.appendChild(item);
         });
     }
-    
+
     dropdown.style.display = 'block';
 }
 
-// Hide account dropdown
 function hideAccountDropdown() {
     const dropdown = document.getElementById('accountDropdown');
-    if (dropdown) {
-        dropdown.style.display = 'none';
-    }
+    if (dropdown) dropdown.style.display = 'none';
 }
 
-// Switch to different account
 function switchAccount(index) {
-    if (index >= 0 && index < accountList.length) {
-        currentAccountIndex = index;
-        const account = accountList[index];
-        
-        console.log('Switching to account:', account.account);
-        
-        // Send authorization for new account
-        socket.send(JSON.stringify({ "authorize": account.token }));
-        
-        // Update display
-        updateAccountDisplay();
-        hideAccountDropdown();
-        
-        showSuccess(`Switched to account ${account.account}`, 2000);
-    }
+    if (index < 0 || index >= accountList.length) return;
+    currentAccountIndex = index;
+    const account = accountList[index];
+    console.log('[Auth] Switching to account:', account.account);
+    sendWS({ authorize: account.token });
+    updateAccountDisplay();
+    hideAccountDropdown();
+    showSuccess(`Switched to account ${account.account}`, 2000);
 }
 
-// Fetch balance for current account
 function fetchAccountBalance() {
-    if (accountList.length > 0 && currentAccountIndex < accountList.length) {
-        // Request balance - this will be handled in onmessage
-        socket.send(JSON.stringify({ balance: 1, account: accountList[currentAccountIndex].account }));
-    }
+    if (!accountList.length || currentAccountIndex >= accountList.length) return;
+    sendWS({ balance: 1, account: accountList[currentAccountIndex].account });
 }
+
+/* ─── Loading Screen ─────────────────────────────────────────────────────── */
+
+function hideLoadingScreen() {
+    if (!isLoadingScreenVisible) return;
+    const screen = document.getElementById('loadingScreen');
+    if (!screen) return;
+    screen.classList.add('hidden');
+    isLoadingScreenVisible = false;
+    setTimeout(() => { screen.style.display = 'none'; }, 600);
+}
+
+function setLoadingMessage(text, color = '') {
+    const el = document.querySelector('.loading-subtitle');
+    if (!el) return;
+    el.textContent = text;
+    if (color) el.style.color = color;
+}
+
+/* ─── Stats & Tracking ───────────────────────────────────────────────────── */
 
 function updateStats() {
     if (!workspace) return;
-    const allBlocks = workspace.getAllBlocks(false);
-    const connectedBlocks = workspace.getTopBlocks(false).reduce((acc, tb) => acc + tb.getDescendants(false).length, 0);
+    const allBlocks       = workspace.getAllBlocks(false);
+    const connectedBlocks = workspace.getTopBlocks(false)
+        .reduce((acc, tb) => acc + tb.getDescendants(false).length, 0);
 
-    const blockCountEl = document.getElementById('blockCount');
+    const blockCountEl     = document.getElementById('blockCount');
     const connectedBlocksEl = document.getElementById('connectedBlocks');
-
-    if (blockCountEl) blockCountEl.textContent = allBlocks.length;
+    if (blockCountEl)      blockCountEl.textContent      = allBlocks.length;
     if (connectedBlocksEl) connectedBlocksEl.textContent = connectedBlocks;
 }
 
 function trackBlockChanges(event) {
-    if ([Blockly.Events.BLOCK_CHANGE, Blockly.Events.BLOCK_CREATE, Blockly.Events.BLOCK_DELETE, Blockly.Events.BLOCK_MOVE].includes(event.type)) {
-        lastModifiedTime = new Date().toLocaleString();
-        const lastModifiedEl = document.getElementById('lastModified');
-        if (lastModifiedEl) lastModifiedEl.textContent = lastModifiedTime;
-    }
+    const trackedTypes = [
+        Blockly.Events.BLOCK_CHANGE,
+        Blockly.Events.BLOCK_CREATE,
+        Blockly.Events.BLOCK_DELETE,
+        Blockly.Events.BLOCK_MOVE
+    ];
+    if (!trackedTypes.includes(event.type)) return;
+    lastModifiedTime = new Date().toLocaleString();
+    const el = document.getElementById('lastModified');
+    if (el) el.textContent = lastModifiedTime;
 }
 
-/* ─── Code Generation Logic ────────────────────────────────────────────── */
+/* ─── Code Generation ────────────────────────────────────────────────────── */
 
 function updateGeneratedCode() {
     if (!workspace || !isCodePanelVisible) return;
     try {
         const code = javascript.javascriptGenerator.workspaceToCode(workspace);
-        const codeElement = document.getElementById('generatedCode');
-        if (codeElement) {
-            codeElement.textContent = code || '// No blocks in workspace';
-            // If you use a highlighter like Prism or Highlight.js, you'd call it here
-        }
-    } catch (e) {
-        console.error('Code generation error:', e);
+        const el   = document.getElementById('generatedCode');
+        if (el) el.textContent = code || '// No blocks in workspace';
+    } catch (err) {
+        console.error('[Code] Generation error:', err);
     }
 }
 
 function toggleCodePanel() {
     const panel = document.getElementById('botCodePanel');
-    const btn = document.getElementById('toggleCodeBtn');
+    const btn   = document.getElementById('toggleCodeBtn');
     if (!panel || !btn) return;
 
     isCodePanelVisible = !isCodePanelVisible;
-    
-    if (isCodePanelVisible) {
-        panel.style.display = 'flex';
-        btn.classList.add('active');
-        updateGeneratedCode();
-    } else {
-        panel.style.display = 'none';
-        btn.classList.remove('active');
-    }
-    
-    // Trigger resize for Blockly
-    setTimeout(() => {
-        if (workspace) Blockly.svgResize(workspace);
-    }, 300);
+    panel.style.display = isCodePanelVisible ? 'flex' : 'none';
+    btn.classList.toggle('active', isCodePanelVisible);
+
+    if (isCodePanelVisible) updateGeneratedCode();
+
+    setTimeout(() => { if (workspace) Blockly.svgResize(workspace); }, 300);
 }
 
 function copyGeneratedCode() {
-    const code = document.getElementById('generatedCode').textContent;
+    const el = document.getElementById('generatedCode');
+    if (!el) return;
+    const code = el.textContent;
     if (!code || code === '// No blocks in workspace') {
         showInfo('No code to copy');
         return;
     }
-    
-    navigator.clipboard.writeText(code).then(() => {
-        showSuccess('Code copied to clipboard!');
-    }).catch(err => {
-        console.error('Failed to copy code:', err);
-        showError('Failed to copy code');
-    });
+    navigator.clipboard.writeText(code)
+        .then(()  => showSuccess('Code copied to clipboard!'))
+        .catch(err => {
+            console.error('[Code] Copy failed:', err);
+            showError('Failed to copy code');
+        });
 }
 
-/* ─── Toast System ──────────────────────────────────────────────────────── */
+/* ─── Toast System ───────────────────────────────────────────────────────── */
 
 function showToast(message, type = 'info', duration = 3000) {
-    let container = document.querySelector('.toast-container') || Object.assign(document.createElement('div'), {className: 'toast-container'});
-    if (!container.parentNode) document.body.appendChild(container);
-    
+    let container = document.querySelector('.toast-container');
+    if (!container) {
+        container = document.createElement('div');
+        container.className = 'toast-container';
+        document.body.appendChild(container);
+    }
+
     const toast = document.createElement('div');
     toast.className = `toast toast-${type}`;
     toast.innerHTML = `<div class="toast-message">${message}</div>`;
-    
     container.appendChild(toast);
+
     setTimeout(() => {
         toast.classList.add('hiding');
-        toast.addEventListener('animationend', () => toast.remove());
+        toast.addEventListener('animationend', () => toast.remove(), { once: true });
     }, duration);
 }
 
 const showSuccess = (m, d) => showToast(m, 'success', d);
-const showError = (m, d) => showToast(m, 'error', d);
-const showInfo = (m, d) => showToast(m, 'info', d);
+const showError   = (m, d) => showToast(m, 'error',   d);
+const showInfo    = (m, d) => showToast(m, 'info',    d);
 
-/* ─── DOM Ready ─────────────────────────────────────────────────────────── */
+/* ─── Market Data ────────────────────────────────────────────────────────── */
+
+function getActiveMarkets() {
+    sendWS({ active_symbols: 'brief', product_type: 'basic' });
+    showInfo('Fetching active markets…');
+}
+
+function processActiveSymbols(data) {
+    if (!data.active_symbols || !Array.isArray(data.active_symbols)) {
+        console.error('[Market] Invalid active_symbols response');
+        return;
+    }
+
+    globalMarketData = extractAndCategorizeOpenMarkets(data.active_symbols);
+
+    // Build first-level dropdown from categorized data
+    const marketKeys = Object.keys(globalMarketData);
+    if (marketKeys.length === 0) {
+        console.warn('[Market] No open markets found');
+        return;
+    }
+
+    currentMarketOptions = marketKeys.map(key => [
+        capitalize(globalMarketData[key].name || key), key
+    ]);
+
+    // Pre-populate second and third dropdowns from the first market entry
+    _preloadCascadingDropdowns(marketKeys[0]);
+
+    showInfo('Active markets loaded.');
+    console.log('[Market] Global market data ready');
+
+    // Initialise Blockly after market data is available
+    initBlockly();
+}
+
+/**
+ * Pre-load secondMarketData and thirdMarketData from the first available
+ * market so the block dropdowns aren't empty on first render.
+ */
+function _preloadCascadingDropdowns(firstMarketKey) {
+    const marketEntry = globalMarketData[firstMarketKey];
+    if (!marketEntry) return;
+
+    const submarkets = marketEntry.submarkets;
+    const submarketKeys = Object.keys(submarkets);
+
+    secondMarketData = submarketKeys.map(k => [submarkets[k].name, k]);
+
+    if (submarketKeys.length > 0) {
+        const firstSubmarketKey = submarketKeys[0];
+        const symbols = submarkets[firstSubmarketKey].symbols;
+        thirdMarketData = symbols.map(s => [capitalize(s.display_name), s.symbol]);
+
+        if (thirdMarketData.length > 0) {
+            getContractForSymbol(thirdMarketData[0][1]);
+        }
+    }
+}
+
+/**
+ * Filter and group active symbols into a nested market → submarket → symbol
+ * structure, keeping only exchanges that are currently open.
+ */
+function extractAndCategorizeOpenMarkets(activeSymbolsArray) {
+    return activeSymbolsArray
+        .filter(market => market.exchange_is_open === 1)
+        .reduce((acc, market) => {
+            const { market: mId, market_display_name: mName,
+                    submarket: smId, submarket_display_name: smName } = market;
+
+            if (!acc[mId]) {
+                acc[mId] = { name: mName, category: mId, submarkets: {} };
+            }
+            if (!acc[mId].submarkets[smId]) {
+                acc[mId].submarkets[smId] = { name: smName, category: smId, symbols: [] };
+            }
+            acc[mId].submarkets[smId].symbols.push({
+                display_name: market.display_name,
+                pip:          market.pip,
+                symbol:       market.symbol
+            });
+
+            return acc;
+        }, {});
+}
+
+/* ─── Contract Data ──────────────────────────────────────────────────────── */
+
+function getContractForSymbol(symbol) {
+    if (!symbol || symbol === 'LOADING' || symbol === 'NONE') return;
+    console.log('[Contract] Requesting contracts for:', symbol);
+    sendWS({
+        contracts_for:   symbol,
+        currency:        selectedAccountCurrency,
+        landing_company: 'svg',
+        product_type:    'basic'
+    });
+}
+
+function processContractsFor(data) {
+    if (data.error) {
+        console.error('[Contract] API error:', data.error.message);
+        showError(`Contract data error: ${data.error.message}`);
+        return;
+    }
+
+    const contracts = data.contracts_for?.available;
+    if (!Array.isArray(contracts) || contracts.length === 0) {
+        console.warn('[Contract] No available contracts in response');
+        return;
+    }
+
+    // Build de-duplicated list of main categories
+    const seen   = new Set();
+    const result = [];
+    for (const item of contracts) {
+        const display = item.contract_category_display;
+        if (!seen.has(display)) {
+            seen.add(display);
+            result.push([display, item.contract_category]);
+        }
+    }
+
+    // Build sub-category groups per category
+    const tempSubData = {};
+    for (const item of contracts) {
+        const category  = item.contract_category;
+        const groupName = _getContractGroupName(item);
+
+        if (!tempSubData[category])             tempSubData[category] = {};
+        if (!tempSubData[category][groupName])  tempSubData[category][groupName] = new Set();
+        tempSubData[category][groupName].add(item.contract_type);
+    }
+
+    // Convert Sets → arrays and store in global subdata
+    for (const [category, groups] of Object.entries(tempSubData)) {
+        subdata[category] = Object.entries(groups).map(([name, types]) => [
+            name, Array.from(types).join('/')
+        ]);
+    }
+
+    mainContractTypes = result;
+    const firstCategory = Object.keys(subdata)[0];
+    subContractTypes = firstCategory ? subdata[firstCategory] : [...PLACEHOLDER_OPTIONS];
+
+    // Refresh main_block dropdowns
+    if (!workspace) return;
+    workspace.getBlocksByType('main_block').forEach(block => {
+        const firstField  = block.getField('first_category');
+        const secondField = block.getField('second_category');
+        const firstValue  = block.getFieldValue('first_category');
+
+        if (firstField) {
+            firstField.menuGenerator_ = result;
+            firstField.setValue(result[0]?.[1] ?? '');
+        }
+        if (secondField) {
+            const sub = subdata[firstValue] || subContractTypes;
+            secondField.menuGenerator_ = sub;
+            secondField.setValue(sub[0]?.[1] ?? '');
+        }
+    });
+
+    console.log('[Contract] Contract types loaded successfully');
+}
+
+/** Map a contract item to its display group name. */
+function _getContractGroupName(item) {
+    const t = item.contract_type;
+    if (t === 'CALL' || t === 'PUT')                                  return 'Higher/Lower';
+    if (t === 'CALLE' || t === 'PUTE')                                return 'Higher/Lower (Even)';
+    if (t === 'MULTUP' || t === 'MULTDOWN')                           return 'Multiply Up/Multiply Down';
+    if (t === 'ASIANU' || t === 'ASIAND')                             return 'Asian Up/Asian Down';
+    if (t === 'DIGITOVER' || t === 'DIGITUNDER')                      return 'Digit Over/Digit Under';
+    if (t.includes('DIGITMATCH') || t.includes('DIGITDIFF'))          return 'Digit Match/Digit Differs';
+    if (t.includes('DIGITODD')   || t.includes('DIGITEVEN'))          return 'Digit Odd/Digit Even';
+    return item.contract_display;
+}
+
+/* ─── Dropdown Cascade Helpers ───────────────────────────────────────────── */
+
+function updateSecondDropdown(block, firstValue) {
+    const secondField = block.getField('second_market');
+    if (!secondField) return;
+
+    const marketEntry = globalMarketData[firstValue];
+    if (!marketEntry) {
+        console.warn('[Dropdown] No market data for:', firstValue);
+        return;
+    }
+
+    const options = Object.entries(marketEntry.submarkets)
+        .map(([key, value]) => [value.name, key]);
+
+    secondMarketData            = options;
+    secondField.menuGenerator_  = options;
+    secondField.setValue(options[0]?.[1] ?? '');
+
+    // Cascade to third
+    if (options.length > 0) {
+        updateThirdDropdown(block, options[0][1]);
+    }
+}
+
+function updateThirdDropdown(block, secondValue) {
+    const thirdField  = block.getField('third_market');
+    const firstValue  = block.getFieldValue('first_market');
+    if (!thirdField) return;
+
+    const marketEntry = globalMarketData[firstValue];
+    const submarket   = marketEntry?.submarkets[secondValue];
+
+    if (!submarket) {
+        console.warn('[Dropdown] No submarket data for:', secondValue);
+        return;
+    }
+
+    const options = submarket.symbols.map(s => [capitalize(s.display_name), s.symbol]);
+
+    thirdMarketData            = options;
+    thirdField.menuGenerator_  = options;
+    thirdField.setValue(options[0]?.[1] ?? '');
+
+    if (options.length > 0) {
+        getContractForSymbol(options[0][1]);
+    }
+}
+
+function updateSecondCategoryDropdown(block, firstCategoryValue) {
+    const secondField = block.getField('second_category');
+    if (!secondField) return;
+
+    const sub = subdata[firstCategoryValue];
+    if (!sub || sub.length === 0) {
+        console.warn('[Dropdown] No sub-category data for:', firstCategoryValue);
+        return;
+    }
+
+    subContractTypes           = sub;
+    secondField.menuGenerator_ = sub;
+    secondField.setValue(sub[0]?.[1] ?? '');
+}
+
+/* ─── Single main_block Enforcement ─────────────────────────────────────── */
+
+function enforceSingleMainBlock(ws) {
+    ws.addChangeListener(event => {
+        if (event.type !== Blockly.Events.BLOCK_CREATE) return;
+        const blocks = ws.getBlocksByType('main_block', false);
+        if (blocks.length <= 1) return;
+
+        // Remove any newly created duplicates
+        (event.ids || []).forEach(id => {
+            const block = ws.getBlockById(id);
+            if (block && block.type === 'main_block') {
+                block.dispose(false, true);
+            }
+        });
+        showError('Only one Main Block is allowed per workspace.');
+    });
+}
+
+/* ─── Utility ────────────────────────────────────────────────────────────── */
+
+/** Title-case every word in a string. */
+function capitalize(str) {
+    if (!str) return '';
+    return String(str)
+        .trim()
+        .split(/\s+/)
+        .map(w => (w[0]?.toUpperCase() ?? '') + w.slice(1).toLowerCase())
+        .join(' ');
+}
+
+/** Safe send – only dispatches if socket is open. */
+function sendWS(payload) {
+    if (!socket || socket.readyState !== WebSocket.OPEN) {
+        console.warn('[WS] Cannot send – socket is not open:', payload);
+        return;
+    }
+    socket.send(JSON.stringify(payload));
+}
+
+/* ─── DOM Ready ──────────────────────────────────────────────────────────── */
 
 document.addEventListener('DOMContentLoaded', () => {
-    // Setup Clock
-    setInterval(() => {
-        const clockDiv = document.querySelector('.clock');
-        if (clockDiv) {
-            const now = new Date();
-            clockDiv.textContent = now.toLocaleTimeString();
-        }
-    }, 1000);
 
+    // Live clock
+    const clockDiv = document.querySelector('.clock');
+    if (clockDiv) {
+        const updateClock = () => { clockDiv.textContent = new Date().toLocaleTimeString(); };
+        updateClock();
+        setInterval(updateClock, 1000);
+    }
 
-    // Apply theme to standard blocks before init
-    Object.keys(Blockly.Blocks).forEach(blockType => {
-        const blockDef = Blockly.Blocks[blockType];
-        if (blockDef && typeof blockDef.init === 'function') {
+    // Apply premium_dark style to all standard Blockly blocks before injection
+    Object.values(Blockly.Blocks).forEach(blockDef => {
+        if (typeof blockDef.init === 'function') {
             const originalInit = blockDef.init;
             blockDef.init = function () {
                 originalInit.call(this);
@@ -680,456 +912,54 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
-    // Run Initializers
+    // Boot WebSocket (Blockly is initialised inside processActiveSymbols
+    // after market data arrives, ensuring dropdowns are populated first)
+    connectWebSocket();
 
-    callingWebSocket();
+    // ── Token login ──
+    document.querySelector('.token-login-btn')?.addEventListener('click', () => {
+        const token = document.getElementById('apiToken')?.value ?? '';
+        loginWithToken(token);
+    });
 
-    // Setup Token Login Button
-    const tokenLoginBtn = document.querySelector('.token-login-btn');
-    if (tokenLoginBtn) {
-        tokenLoginBtn.addEventListener('click', () => {
-            const apiToken = document.getElementById('apiToken').value.trim();
-            loginWithToken(apiToken);
-        });
-    }
-
-    // Account Display Click Handler
-    const accountDisplay = document.getElementById('accountDisplay');
-    if (accountDisplay) {
-        accountDisplay.addEventListener('click', () => {
-            showAccountDropdown();
-        });
-    }
-
-    // Connect Account Button Click Handler
-    const connectBtn = document.getElementById('connectAccountBtn');
-    if (connectBtn) {
-        connectBtn.addEventListener('click', () => {
-            // Show login screen
-            const loginDiv = document.querySelector('.login');
-            if (loginDiv) loginDiv.style.display = 'flex';
-        });
-    }
-
-    // Close Account Dropdown Button
-    const closeDropdownBtn = document.getElementById('closeAccountDropdown');
-    if (closeDropdownBtn) {
-        closeDropdownBtn.addEventListener('click', () => {
-            hideAccountDropdown();
-        });
-    }
+    // ── Account display / dropdown ──
+    document.getElementById('accountDisplay')?.addEventListener('click', showAccountDropdown);
+    document.getElementById('connectAccountBtn')?.addEventListener('click', showLoginScreen);
+    document.getElementById('closeAccountDropdown')?.addEventListener('click', hideAccountDropdown);
 
     // Close dropdown when clicking outside
-    document.addEventListener('click', (e) => {
-        const dropdown = document.getElementById('accountDropdown');
+    document.addEventListener('click', e => {
+        const dropdown      = document.getElementById('accountDropdown');
         const accountDisplay = document.getElementById('accountDisplay');
-        
-        if (dropdown && !dropdown.contains(e.target) && accountDisplay && !accountDisplay.contains(e.target)) {
+        if (
+            dropdown &&
+            !dropdown.contains(e.target) &&
+            accountDisplay &&
+            !accountDisplay.contains(e.target)
+        ) {
             hideAccountDropdown();
         }
     });
 
-    // Setup Workspace Controls (Zoom/Focus)
+    // ── Workspace zoom controls ──
     document.querySelectorAll('.workspace-controls').forEach(btn => {
         btn.addEventListener('click', () => {
             if (!workspace) return;
-            const label = btn.textContent.trim();
-            if (label === 'Zoom +') workspace.zoomCenter(1);
-            else if (label === 'Zoom -') workspace.zoomCenter(-1);
-            else if (label === 'Focus') workspace.scrollCenter();
-            else if (label === 'Reset') {
-                workspace.setScale(1);
-                workspace.scrollCenter();
+            switch (btn.textContent.trim()) {
+                case 'Zoom +': workspace.zoomCenter(1);                          break;
+                case 'Zoom -': workspace.zoomCenter(-1);                         break;
+                case 'Focus':  workspace.scrollCenter();                         break;
+                case 'Reset':  workspace.setScale(1); workspace.scrollCenter();  break;
             }
         });
     });
 
-    const importBtn = document.getElementById('importBtn');
-    if (importBtn) {
-        importBtn.addEventListener('click', () => {
-            console.log('Import button clicked');
-        });
-    }
+    // ── Import button (placeholder) ──
+    document.getElementById('importBtn')?.addEventListener('click', () => {
+        console.log('[UI] Import button clicked (not yet implemented)');
+    });
 
-    // Toggle Code Panel Button
-    const toggleCodeBtn = document.getElementById('toggleCodeBtn');
-    if (toggleCodeBtn) {
-        toggleCodeBtn.addEventListener('click', toggleCodePanel);
-    }
-
-    // Copy Code Button
-    const copyCodeBtn = document.getElementById('copyCodeBtn');
-    if (copyCodeBtn) {
-        copyCodeBtn.addEventListener('click', copyGeneratedCode);
-    }
+    // ── Code panel controls ──
+    document.getElementById('toggleCodeBtn')?.addEventListener('click', toggleCodePanel);
+    document.getElementById('copyCodeBtn')?.addEventListener('click', copyGeneratedCode);
 });
-
-function getActiveMarkets(){
-    const msg = {
-        "active_symbols": "brief",
-        "product_type": "basic"
-    };
-    socket.send(JSON.stringify(msg));
-    showInfo('Fetching active markets...');
-}
-
-var activeSymbols = [
-
-];
-function processActiveSymbols(data) {
-    //console.log('Active markets:', data.active_symbols);
-    let main = data.active_symbols;
-    globalMarketData = extractAndCategorizeOpenMarkets(main);
-    //console.log('Global market data updated:', globalMarketData);
-
-    // When your app receives new market data:
-const newMarkets = [
-  ["Forex", "forex"],
-  ["Crypto", "crypto"],
-  ["Stocks", "stocks"]
-];
-
-updateMarketList(newMarkets);
-    
-    // Refresh all main_blocks on workspace to show the newly loaded data
-    if (workspace) {
-        const mainBlocks = workspace.getBlocksByType('main_block', false);
-        mainBlocks.forEach(block => {
-            const currentFirst = block.getFieldValue('frist_market');
-            if (currentFirst === 'NONE' || !globalMarketData[currentFirst]) {
-                const firstMarketId = Object.keys(globalMarketData)[0];
-                if (firstMarketId) {
-                    block.setFieldValue(firstMarketId, 'frist_market');
-                }
-            }
-        });
-    }
-    
-    showInfo('Active markets fetched successfully.');
-    //get main markets from list
-let testaray = [];
-const mainMarkets = Object.keys(globalMarketData);
-
-for (let i = 0; i < mainMarkets.length; i++) {
-    const element = mainMarkets[i];
-
-    const capitalized = element
-        .split(" ")
-        .map(word => word.charAt(0).toUpperCase() + word.slice(1))
-        .join(" ");
-
-    testaray.push([capitalized, element]);
-}
-     //console.log(testaray);
-    updateMarketList(testaray);
-    //getAssets()
-
-
-        updateInitialBlockData()
-    function updateInitialBlockData(){
-        let data = globalMarketData;
-        const firstKey = Object.keys(data)[0];
-        //console.log(firstKey); // "forex"
-        //console.log(data[firstKey].name)
-
-        //console.log(data[firstKey].submarkets, "Getting sub markets")
-        const submarketFristKey = Object.keys(data[firstKey].submarkets)
-
-
-        //console.log(data[firstKey].submarkets[submarketFristKey], "Getting Symbols")
-        //console.log(data[firstKey].submarkets[submarketFristKey].symbols[0], "Getting last data")
-
-    getSeondData()
-
-        function getSeondData() {
-            let options = [["erer", "dfdfdfd"],["erer", "dfdfdfd"],["ereer", "dfdfdfd"]];
-            options = Object.entries(globalMarketData[firstKey].submarkets).map(([key, value]) => [
-        value.name, key])
-        //console.log(options)
-        secondMarketData = options;
-        }
-    getThirdData()
-        function getThirdData() {
-            let secondValue = secondMarketData[0][1]
-            //console.log(secondValue)
-        let options = [];
-        for (let i = 0; i < globalMarketData[firstKey].submarkets[secondValue].symbols.length; i++) {
-            const element = globalMarketData[firstKey].submarkets[secondValue].symbols[i].display_name;
-            const key = globalMarketData[firstKey].submarkets[secondValue].symbols[i].symbol;
-            options.push([capitalize(element), key]);
-        }
-        thirdMarketData = options;
-
-       // console.log(options)
-        getContractForSymbols(options[0][1])
-        }
-    }
-
-
-    console.log('Calling block initialzng')
-    initBlockly();
-}
-
-
-function extractAndCategorizeOpenMarkets(activeSymbolsArray) {
-    return activeSymbolsArray
-        // 1. FILTER: Only keep markets where the exchange is currently open
-        .filter(market => market.exchange_is_open === 1)
-        
-        // 2. CATEGORIZE: Group the remaining open markets
-        .reduce((categorizedData, currentMarket) => {
-            
-            const marketId = currentMarket.market; 
-            const marketName = currentMarket.market_display_name; 
-            const submarketId = currentMarket.submarket; 
-            const submarketName = currentMarket.submarket_display_name; 
-            
-            // Extract only the needed properties
-            const symbolData = {
-                display_name: currentMarket.display_name,
-                pip: currentMarket.pip,
-                symbol: currentMarket.symbol
-            };
-
-            // Create Main Category if it doesn't exist
-            if (!categorizedData[marketId]) {
-                categorizedData[marketId] = {
-                    name: marketName,
-                    category: marketId,
-                    submarkets: {}
-                };
-            }
-
-            // Create Sub Category if it doesn't exist
-            if (!categorizedData[marketId].submarkets[submarketId]) {
-                categorizedData[marketId].submarkets[submarketId] = {
-                    name: submarketName,
-                    category: submarketId,
-                    symbols: []
-                };
-            }
-
-            // Push the data into the correct category
-            categorizedData[marketId].submarkets[submarketId].symbols.push(symbolData);
-
-            return categorizedData;
-        }, {});
-}
-
-function getContractForSymbols(symbol) {
-
-    //send request to get contracts for selected market
-    let request = {
-    "contracts_for": symbol,
-   // "contracts_for": "1HZ100V",
-    "currency": selectedAccCurruncy,
-    "landing_company": "svg",
-    "product_type": "basic"
-    }
-    console.log('calling getContractForSymbols')
-    socket.send(JSON.stringify(request));
-}
-
-
-function enforceSingleMainBlock(workspace) {
-  workspace.addChangeListener(function(event) {
-    // Only react when blocks are created
-    if (event.type !== Blockly.Events.BLOCK_CREATE) return;
-
-    const blocks = workspace.getBlocksByType('main_block', false);
-
-    // If more than 1 exists → remove the newest one
-    if (blocks.length > 1) {
-      // The newly created block is in event.ids
-      event.ids.forEach(id => {
-        const block = workspace.getBlockById(id);
-        if (block && block.type === 'main_block') {
-          block.dispose(false, true); // remove without affecting others
-        }
-      });
-    }
-  });
-}
-
-
-
-function edit_second_dropdown(block, firstValue) {
-    const secondField = block.getField('second_market');
-    if (!secondField) return;
-
-    let options = [["erer", "dfdfdfd"],["erer", "dfdfdfd"],["ereer", "dfdfdfd"]];
-    options = Object.entries(globalMarketData[firstValue].submarkets).map(([key, value]) => [
-    value.name, key
-]);
-    // Update dropdown
-    secondField.menuGenerator_ = options;
-    // Set first value
-    secondField.setValue(options[0][1]);
-}
-
-function edit_third_dropdown(block, secondValue) {
-    //console.log(secondValue)
-    const firstValue = block.getFieldValue('frist_market');
-    const thirdField = block.getField('third_market');
-    if (!thirdField) return;
-
-    let options = [["Select", "NONE"]];
-
-    //console.log(firstValue,secondValue);
-    //console.log(globalMarketData[firstValue].submarkets[secondValue].symbols);
-    if (
-        globalMarketData[firstValue] &&
-        globalMarketData[firstValue].submarkets[secondValue]
-    ) {
-        options = [];
-        for (let i = 0; i < globalMarketData[firstValue].submarkets[secondValue].symbols.length; i++) {
-            const element = globalMarketData[firstValue].submarkets[secondValue].symbols[i].display_name;
-            const key = globalMarketData[firstValue].submarkets[secondValue].symbols[i].symbol;
-            options.push([capitalize(element), key]);
-        }
-    }
-
-    //console.log(options[0][1]);
-
-    getContractForSymbols(options[0][1])
-
-    // Update dropdown
-    
-    thirdField.menuGenerator_ = options;
-
-    // Set first value automatically
-    thirdField.setValue(options[0][1]);
-}
-
-function capitalize(str) {
-    return str
-        .trim()
-        .split(/\s+/)
-        .map(w => w[0]?.toUpperCase() + w.slice(1).toLowerCase())
-        .join(" ");
-}
-
-
-
-function processContractsFor(data) {
-    let contracts = data.contracts_for.available;
-var result = [];
-var seen = new Set();
-
-for (let i = 0; i < contracts.length; i++) {
-  const element = contracts[i];
-  const value = element.contract_category_display;
-
-  if (seen.has(value)) {
-    continue;
-  } else {
-    seen.add(value);
-    result.push([value, element.contract_category]);
-  }
-}
-
-
-
-
-const sampledata = {};
-
-
-// Step 1: Group by category
-contracts.forEach(item => {
-  const category = item.contract_category;
-
-  if (!sampledata[category]) {
-    sampledata[category] = {};
-  }
-
-  // Step 2: Create pair key (group inside category)
-  const pairKey = item.contract_display.replace("Higher", "Higher")
-                                       .replace("Lower", "Lower"); // optional cleanup
-
-  // Better: group by contract_type pattern
-  let groupName;
-
-  if (item.contract_type.includes("DIGITMATCH") || item.contract_type.includes("DIGITDIFF")) {
-    groupName = "Digit Matches/Digit Differs";
-  } else if (item.contract_type.includes("DIGITODD") || item.contract_type.includes("DIGITEVEN")) {
-    groupName = "Digit Odd/Digit Even";
-  } else if (item.contract_type === "CALL" || item.contract_type === "PUT") {
-    groupName = "Higher/Lower";
-  } else if (item.contract_type === "CALLE" || item.contract_type === "PUTE") {
-    groupName = "Higher/Lower E";
-  } else if (item.contract_type === "MULTUP" || item.contract_type === "MULTDOWN") {
-    groupName = "Multiply Up/Multiply Down";
-  } else if (item.contract_type === "DIGITOVER" || item.contract_type === "DIGITUNDER") {
-    groupName = "Digit Over/Digit Under";
-  } else if (item.contract_type === "ASIANU" || item.contract_type === "ASIAND") {
-    groupName = "Asian Up/Asian Down";
-  }
-   else {
-    groupName = item.contract_display;
-  }
-
-  if (!sampledata[category][groupName]) {
-    sampledata[category][groupName] = new Set();
-  }
-
-  sampledata[category][groupName].add(item.contract_type);
-});
-
-
-// Step 3: Convert to final format
-
-
-Object.entries(sampledata).forEach(([category, groups]) => {
-  subdata[category] = Object.entries(groups).map(([name, types]) => {
-    return [name, Array.from(types).join('/')];
-  });
-});
-
-
-//subContractTypes = subdata;
-
-//console.log(subdata);
-
-
-
-
-console.log('contracts types fetched successfully')
-//console.log(data)
-//console.log(result);
-mainContractTypes = result;
-let fristKey = Object.keys(subdata)[0];
-subContractTypes = subdata[fristKey];
-
-workspace.getBlocksByType('main_block').forEach(block => {
-    const firstField = block.getField('frist_catogory');
-    const secondField = block.getField('second_catogory');
-    const firstValue = block.getFieldValue('frist_catogory');
-    if (firstField) {
-        firstField.menuGenerator_ = result;
-        firstField.setValue(result[0][1]);
-    }
-
-    if (secondField) {
-        subContractTypes = subdata[firstValue];
-        secondField.menuGenerator_ = subContractTypes;
-        secondField.setValue(subContractTypes[0][1]);
-    }
-
-});
-
-//console.log(result)
-}
-
-
-function second_catogoryUpdate(block) {
-    const firstValue = block.getFieldValue('frist_catogory');
-    const secondField = block.getField('second_catogory');
-    if (secondField) {
-        let data = subdata[firstValue];
-        //console.log(subdata, firstValue)
-        secondField.menuGenerator_ = data;
-        secondField.setValue(data[0][1]);
-    }
-}
-
-//second 
