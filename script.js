@@ -143,6 +143,18 @@ Blockly.Blocks['trade_settings'] = {
       ]), "stake_unit");
   }
 };
+Blockly.Blocks['purchase'] = {
+  init: function() {
+    this.appendDummyInput()
+        .appendField("Purchase")
+        .appendField(new Blockly.FieldDropdown([
+          ["Option", "OPTION"]
+        ]), "purchase_direction");
+
+    this.setPreviousStatement(true, null);
+    this.setColour(230);
+  }
+};
 
 /* ─── Initialize Blockly ─────────────────────────────────────────────────── */
 function initBlockly() {
@@ -241,6 +253,9 @@ function onWorkspaceChange(event) {
         case 'first_category':
             console.log('[Contract] First category changed to:', event.newValue);
             updateSecondCategoryDropdown(block, event.newValue);
+            break;
+        case 'second_category':
+            console.log('[Contract] Second category changed to:', event.newValue);
             break;
         default:
             break;
@@ -792,7 +807,7 @@ function processContractsFor(data) {
 
         if (!tempSubData[category])             tempSubData[category] = {};
         if (!tempSubData[category][groupName])  tempSubData[category][groupName] = new Set();
-        tempSubData[category][groupName].add(item.contract_type);
+        tempSubData[category][groupName].add(item.contract_display);
     }
 
     // Convert Sets → arrays and store in global subdata
@@ -1038,22 +1053,22 @@ function block_change_detect() {
                 field: event.name,
                 value: event.newValue
             });*/
-if (event.name === 'second_category') {
+            if (event.name === 'second_category') {
 
-    let blocks = workspace.getBlocksByType('trade_settings', false);
+            let blocks = workspace.getBlocksByType('trade_settings', false);
 
-    blocks.forEach(block => {
+            blocks.forEach(block => {
 
-        // 🔷 set category
-        block.category = event.newValue;
+                // 🔷 set category
+                block.category = event.newValue;
 
-        // 🔷 rebuild structure
-        block.updateShape_();
+                // 🔷 rebuild structure
+                block.updateShape_();
 
-        // 🔷 force UI refresh
-        block.render();
-    });
-}
+                // 🔷 force UI refresh
+                block.render();
+            });
+            }
         }
 
     });

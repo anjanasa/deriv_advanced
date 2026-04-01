@@ -1,10 +1,27 @@
 javascript.javascriptGenerator.forBlock['trade_settings'] = function(block, generator) {
-  var dropdown_duration_unit = block.getFieldValue('duration_unit');
-  var value_duration = generator.valueToCode(block, 'duration', javascript.Order.ATOMIC);
-  var dropdown_stake_unit = block.getFieldValue('stake_unit');
-  var value_stake = generator.valueToCode(block, 'stake', javascript.Order.ATOMIC);
+  if (block.category === "ACCU") {
+    var dropdown_duration_unit = block.getFieldValue('duration_unit');
+    var dropdown_stake_unit = block.getFieldValue('stake_unit');
+    var value_stake = generator.valueToCode(block, 'stake', javascript.Order.ATOMIC);
+    var code = `
+    duration_unit = "${dropdown_duration_unit}";
+    stake_unit = "${dropdown_stake_unit}";
+    stake = ${value_stake};
+    `;
+  }else{
+    var dropdown_duration_unit = block.getFieldValue('duration_unit');
+    var value_duration = generator.valueToCode(block, 'duration', javascript.Order.ATOMIC);
+    var dropdown_stake_unit = block.getFieldValue('stake_unit');
+    var value_stake = generator.valueToCode(block, 'stake', javascript.Order.ATOMIC);
+    var code = `
+    duration_unit = "${dropdown_duration_unit}";
+    duration = ${value_duration};
+    stake_unit = "${dropdown_stake_unit}";
+    stake = ${value_stake};
+    `;
+  }
   // TODO: Assemble javascript into code variable.
-  var code = '...\n';
+
   return code;
 };
 
@@ -16,7 +33,7 @@ javascript.javascriptGenerator.forBlock['virtual_hook'] = function(block, genera
   var value_max_won = generator.valueToCode(block, 'max_won', javascript.Order.ATOMIC);
   var value_max_trades = generator.valueToCode(block, 'max_trades', javascript.Order.ATOMIC);
   // TODO: Assemble javascript into code variable.
-  var code = '...\n';
+  var code = `...`;
   return code;
 };
 
