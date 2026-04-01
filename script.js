@@ -54,8 +54,8 @@ Blockly.Blocks['main_block'] = {
         this.appendDummyInput()
             .appendField('Contract Type')
             .appendField(new Blockly.FieldDropdown([
-                ['Both',   'both'],
-                ['Single', 'single']
+                ['Single', 'single'],
+                ['Both',   'both']
             ]), 'contract_type');
         this.appendDummyInput()
             .appendField('Default Candle Interval')
@@ -91,6 +91,57 @@ Blockly.Blocks['main_block'] = {
         this.setTooltip('');
         this.setHelpUrl('');
     }
+};
+Blockly.Blocks['trade_settings'] = {
+  init: function () {
+
+    this.category = null;
+
+    this.updateShape_();
+
+    this.setPreviousStatement(true, null);
+    this.setColour(230);
+  },
+
+  updateShape_: function () {
+
+    // 🔴 Remove all dynamic inputs
+    if (this.getInput('duration')) this.removeInput('duration');
+    if (this.getInput('growth')) this.removeInput('growth');
+    if (this.getInput('stake')) this.removeInput('stake');
+
+    // ✅ ACCU → ONLY dropdown (no value input)
+    if (this.category === "ACCU") {
+
+      this.appendDummyInput("growth")
+        .appendField("Growth Rate :")
+        .appendField(new Blockly.FieldDropdown([
+          ["1%", "1"],
+          ["2%", "2"],
+          ["5%", "5"],
+          ["10%", "10"]
+        ]), "growth_unit");
+
+    } else {
+
+      // ✅ NORMAL → duration with value input
+      this.appendValueInput("duration")
+        .appendField("Duration :")
+        .appendField(new Blockly.FieldDropdown([
+          ["Ticks", "t"],
+          ["Seconds", "s"],
+          ["Minutes", "m"]
+        ]), "duration_unit");
+    }
+
+    // ✅ Stake (keep as value input)
+    this.appendValueInput("stake")
+      .appendField("Stake :")
+      .appendField(new Blockly.FieldDropdown([
+        ["Stake", "stake"],
+        ["Payout", "payout"]
+      ]), "stake_unit");
+  }
 };
 
 /* ─── Initialize Blockly ─────────────────────────────────────────────────── */
@@ -145,6 +196,7 @@ function initBlockly() {
     enforceSingleMainBlock(workspace);
 
     console.log('[Blockly] Workspace initialised ✓');
+    block_change_detect()
 }
 
 /**
@@ -273,6 +325,9 @@ function handleSocketMessage(event) {
         default:
             // Silently ignore message types we don't handle
             break;
+    }
+    if (data.msg_type === 'contracts_for') {
+        console.log('[WS] Contracts for:', data);
     }
 }
 
@@ -776,7 +831,7 @@ function processContractsFor(data) {
 function _getContractGroupName(item) {
     const t = item.contract_type;
     if (t === 'CALL' || t === 'PUT')                                  return 'Higher/Lower';
-    if (t === 'CALLE' || t === 'PUTE')                                return 'Higher/Lower (Even)';
+    if (t === 'CALLE' || t === 'PUTE')                                return 'Higher/Lower (Equals)';
     if (t === 'MULTUP' || t === 'MULTDOWN')                           return 'Multiply Up/Multiply Down';
     if (t === 'ASIANU' || t === 'ASIAND')                             return 'Asian Up/Asian Down';
     if (t === 'DIGITOVER' || t === 'DIGITUNDER')                      return 'Digit Over/Digit Under';
@@ -963,3 +1018,43 @@ document.addEventListener('DOMContentLoaded', () => {
     document.getElementById('toggleCodeBtn')?.addEventListener('click', toggleCodePanel);
     document.getElementById('copyCodeBtn')?.addEventListener('click', copyGeneratedCode);
 });
+
+
+
+
+
+function block_change_detect() {
+    workspace.addChangeListener(function(event) {
+
+        // Ignore non-change events if needed
+        if (event.type !== Blockly.Events.BLOCK_CHANGE) return;
+
+        const block = workspace.getBlockById(event.blockId);
+        if (!block) return;
+
+        if (block.type === 'main_block') {
+            /*console.log('Main block changed:', {
+                blockId: event.blockId,
+                field: event.name,
+                value: event.newValue
+            });*/
+if (event.name === 'second_category') {
+
+    let blocks = workspace.getBlocksByType('trade_settings', false);
+
+    blocks.forEach(block => {
+
+        // 🔷 set category
+        block.category = event.newValue;
+
+        // 🔷 rebuild structure
+        block.updateShape_();
+
+        // 🔷 force UI refresh
+        block.render();
+    });
+}
+        }
+
+    });
+}

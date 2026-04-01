@@ -491,6 +491,29 @@ javascript.javascriptGenerator.forBlock['main_block'] = function(block, generato
   let trading_cat = ${dropdown_contract_type}
   let candle_interval = ${dropdown_candle_interval}
   let final_cat = ${dropdown_second_category}
+
+  restart_buy_sell_on_error = ${checkbox_buy_sell_error}
+  restart_last_trade_on_error = ${checkbox_last_trade_on_error}
+
+  function runOnce(){
+    ${statements_run_once}
+  }
+
+  function tradeOptions(){
+    ${statements_trade_options}
+  }
+
+  function watchPurchase(){
+    ${statements_watch_purchase}
+  }
+
+  function watchSell(){
+    ${statements_watch_sell}
+  }
+
+  function tradeAgain(){
+    ${statements_trade_again}
+  }
   `;
   return code;
 };
