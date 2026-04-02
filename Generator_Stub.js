@@ -1,5 +1,5 @@
 javascript.javascriptGenerator.forBlock['trade_settings'] = function(block, generator) {
-  if (block.category === "ACCU") {
+  if (block.category === "Accumulator Up") {
     var dropdown_duration_unit = block.getFieldValue('duration_unit');
     var dropdown_stake_unit = block.getFieldValue('stake_unit');
     var value_stake = generator.valueToCode(block, 'stake', javascript.Order.ATOMIC);

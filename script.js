@@ -109,23 +109,22 @@ Blockly.Blocks['trade_settings'] = {
     if (this.getInput('duration')) this.removeInput('duration');
     if (this.getInput('growth')) this.removeInput('growth');
     if (this.getInput('stake')) this.removeInput('stake');
+    if (this.getInput('digit')) this.removeInput('digit');
+    if (this.getInput('single_barrier')) this.removeInput('single_barrier');
+    if (this.getInput('first_barrier')) this.removeInput('first_barrier');
+    if (this.getInput('second_barrier')) this.removeInput('second_barrier');
 
-    // ✅ ACCU → ONLY dropdown (no value input)
-    if (this.category === "ACCU") {
+    function addStake(block) {
+        block.appendValueInput("stake")
+      .appendField("Stake :")
+      .appendField(new Blockly.FieldDropdown([
+        ["Stake", "stake"],
+        ["Payout", "payout"]
+      ]), "stake_unit");
+    }
 
-      this.appendDummyInput("growth")
-        .appendField("Growth Rate :")
-        .appendField(new Blockly.FieldDropdown([
-          ["1%", "1"],
-          ["2%", "2"],
-          ["5%", "5"],
-          ["10%", "10"]
-        ]), "growth_unit");
-
-    } else {
-
-      // ✅ NORMAL → duration with value input
-      this.appendValueInput("duration")
+    function addDuration(block) {
+        block.appendValueInput("duration")
         .appendField("Duration :")
         .appendField(new Blockly.FieldDropdown([
           ["Ticks", "t"],
@@ -134,13 +133,80 @@ Blockly.Blocks['trade_settings'] = {
         ]), "duration_unit");
     }
 
-    // ✅ Stake (keep as value input)
-    this.appendValueInput("stake")
-      .appendField("Stake :")
-      .appendField(new Blockly.FieldDropdown([
-        ["Stake", "stake"],
-        ["Payout", "payout"]
-      ]), "stake_unit");
+    function addDigit(block) {
+        block.appendValueInput('digit')
+        .appendField("Predection :")
+    }
+
+    function addSingleBarrier(block) {
+        block.appendValueInput('single_barrier')
+        .appendField("Barrier :")
+        .appendField(new Blockly.FieldDropdown([
+          ["Offset +", "offset_plus"],
+          ["Offset -", "offset_minus"]
+        ]), "barrier_direction");
+    }
+
+    function addDoubleBarrier(block) {
+
+    block.appendValueInput('first_barrier')
+        .appendField("Barrier 1 :")
+        .appendField(new Blockly.FieldDropdown([
+        ["Offset +", "offset_plus"],
+        ["Offset -", "offset_minus"]
+        ]), "barrier_direction_1");
+
+    block.appendValueInput('second_barrier')
+        .appendField("Barrier 2 :")
+        .appendField(new Blockly.FieldDropdown([
+        ["Offset -", "offset_minus"],
+        ["Offset +", "offset_plus"]
+        ]), "barrier_direction_2");
+    }
+
+    function addGrowth(block) {
+        block.appendDummyInput("growth")
+        .appendField("Growth Rate :")
+        .appendField(new Blockly.FieldDropdown([
+          ["1%", "1"],
+          ["2%", "2"],
+          ["5%", "5"],
+          ["10%", "10"]
+        ]), "growth_unit");
+    }
+
+    switch (this.category) {
+      case "Accumulator Up":
+        addGrowth(this);
+        addStake(this);
+        break;
+      case "Digit Match/Digit Differs":
+        addDuration(this);
+        addStake(this);
+        addDigit(this);
+        break;  
+      case "High Tick/Low Tick":
+        addDuration(this);
+        addStake(this);
+        addDigit(this);
+        break;  
+      case "One Touch/No Touch": 
+        addDuration(this);
+        addStake(this);
+        addSingleBarrier(this);
+        break;
+      case "Ends Between/Ends Outside":
+        addDuration(this);
+        addStake(this);
+        addDoubleBarrier(this);
+        break;
+      default:    
+        addDuration(this);
+        addStake(this);
+        break;
+    }
+
+    this.render();
   }
 };
 Blockly.Blocks['purchase'] = {
@@ -255,7 +321,7 @@ function onWorkspaceChange(event) {
             updateSecondCategoryDropdown(block, event.newValue);
             break;
         case 'second_category':
-            console.log('[Contract] Second category changed to:', event.newValue);
+            secondCatupdateTrigger(block, event.newValue);
             break;
         default:
             break;
@@ -788,10 +854,14 @@ function processContractsFor(data) {
         return;
     }
 
-    // Build de-duplicated list of main categories
+    // Categories to hide entirely from the dropdowns
+    const EXCLUDED_CATEGORIES = new Set(['lookback']);
+
+    // Build de-duplicated list of main categories (excluding hidden ones)
     const seen   = new Set();
     const result = [];
     for (const item of contracts) {
+        if (EXCLUDED_CATEGORIES.has(item.contract_category)) continue;
         const display = item.contract_category_display;
         if (!seen.has(display)) {
             seen.add(display);
@@ -799,9 +869,10 @@ function processContractsFor(data) {
         }
     }
 
-    // Build sub-category groups per category
+    // Build sub-category groups per category (excluding hidden ones)
     const tempSubData = {};
     for (const item of contracts) {
+        if (EXCLUDED_CATEGORIES.has(item.contract_category)) continue;
         const category  = item.contract_category;
         const groupName = _getContractGroupName(item);
 
@@ -811,10 +882,21 @@ function processContractsFor(data) {
     }
 
     // Convert Sets → arrays and store in global subdata
+    // Use the group *name* as the value so that entries like
+    // "Higher/Lower" and "Higher/Lower (Equals)" are always distinct.
+    // (Using contract_display strings caused both groups to resolve to the
+    //  same "Higher/Lower" value, making setValue() always pick the first one.)
     for (const [category, groups] of Object.entries(tempSubData)) {
-        subdata[category] = Object.entries(groups).map(([name, types]) => [
-            name, Array.from(types).join('/')
+        subdata[category] = Object.entries(groups).map(([name]) => [
+            name, name   // [display label, unique value]
         ]);
+
+        // Explicitly add "Rise/Fall" alongside "Higher/Lower" for the Up/Down (callput) category
+        if (category === 'callput') {
+            if (!subdata[category].some(opt => opt[1] === 'Rise/Fall')) {
+                subdata[category].unshift(['Rise/Fall', 'Rise/Fall']);
+            }
+        }
     }
 
     mainContractTypes = result;
@@ -852,6 +934,15 @@ function _getContractGroupName(item) {
     if (t === 'DIGITOVER' || t === 'DIGITUNDER')                      return 'Digit Over/Digit Under';
     if (t.includes('DIGITMATCH') || t.includes('DIGITDIFF'))          return 'Digit Match/Digit Differs';
     if (t.includes('DIGITODD')   || t.includes('DIGITEVEN'))          return 'Digit Odd/Digit Even';
+    if (t === 'EXPIRYRANGE' || t === 'EXPIRYMISS' ||
+        t === 'EXPIRYRANGEE' || t === 'EXPIRYMISSE')                  return 'Ends Between/Ends Outside';
+    if (t === 'TICKHIGH' || t === 'TICKLOW')                          return 'High Tick/Low Tick';
+    if (t === 'RESETCALL' || t === 'RESETPUT')                        return 'Reset Call/Reset Put';
+    if (t === 'RUNHIGH'   || t === 'RUNLOW')                          return 'Only Up/Only Down';
+    if (t === 'RANGE'          || t === 'UPORDOWN')                   return 'Stay Between/Goes Outside';
+    if (t === 'ONETOUCH'       || t === 'NOTOUCH')                    return 'One Touch/No Touch';
+    if (t === 'TURBOSLONG'     || t === 'TURBOSSHORT')                return 'Turbo Long/Turbo Short';
+    if (t === 'VANILLALONGCALL'|| t === 'VANILLALONGPUT')             return 'Vanilla Long Call/Vanilla Long Put';
     return item.contract_display;
 }
 
@@ -1073,3 +1164,21 @@ function block_change_detect() {
 
     });
 }
+
+
+ function secondCatupdateTrigger(block, newValue){
+    console.log("secondCatupdateTrigger",newValue);
+    let blocks = workspace.getBlocksByType('trade_settings', false);
+
+    blocks.forEach(block => {
+
+        // 🔷 set category
+        block.category = newValue;
+
+        // 🔷 rebuild structure
+        block.updateShape_();
+
+        // 🔷 force UI refresh
+        block.render();
+    });
+ }
