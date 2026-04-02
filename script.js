@@ -94,37 +94,46 @@ Blockly.Blocks['main_block'] = {
 };
 Blockly.Blocks['trade_settings'] = {
   init: function () {
-
     this.category = null;
-
-    this.updateShape_();
 
     this.setPreviousStatement(true, null);
     this.setColour(230);
+    this.setInputsInline(false);
+
+    this.updateShape_();
+  },
+
+  setCategory: function (category) {
+    if (this.category !== category) {
+      this.category = category;
+      this.updateShape_();
+    }
   },
 
   updateShape_: function () {
 
-    // 🔴 Remove all dynamic inputs
-    if (this.getInput('duration')) this.removeInput('duration');
-    if (this.getInput('growth')) this.removeInput('growth');
-    if (this.getInput('stake')) this.removeInput('stake');
-    if (this.getInput('digit')) this.removeInput('digit');
-    if (this.getInput('single_barrier')) this.removeInput('single_barrier');
-    if (this.getInput('first_barrier')) this.removeInput('first_barrier');
-    if (this.getInput('second_barrier')) this.removeInput('second_barrier');
+    // ✅ Remove all dynamic inputs safely
+    [
+      'duration',
+      'growth',
+      'stake',
+      'digit',
+      'single_barrier',
+      'first_barrier',
+      'second_barrier',
+      'vanila_barriers'
+    ].forEach(input => {
+      if (this.getInput(input)) {
+        this.removeInput(input);
+      }
+    });
 
-    function addStake(block) {
-        block.appendValueInput("stake")
-      .appendField("Stake :")
-      .appendField(new Blockly.FieldDropdown([
-        ["Stake", "stake"],
-        ["Payout", "payout"]
-      ]), "stake_unit");
-    }
+    // ----------------------------
+    // 🔧 Input Builders
+    // ----------------------------
 
     function addDuration(block) {
-        block.appendValueInput("duration")
+      block.appendValueInput("duration")
         .appendField("Duration :")
         .appendField(new Blockly.FieldDropdown([
           ["Ticks", "t"],
@@ -133,13 +142,22 @@ Blockly.Blocks['trade_settings'] = {
         ]), "duration_unit");
     }
 
+    function addStake(block) {
+      block.appendValueInput("stake")
+        .appendField("Stake :")
+        .appendField(new Blockly.FieldDropdown([
+          ["Stake", "stake"],
+          ["Payout", "payout"]
+        ]), "stake_unit");
+    }
+
     function addDigit(block) {
-        block.appendValueInput('digit')
-        .appendField("Predection :")
+      block.appendValueInput('digit')
+        .appendField("Prediction :");
     }
 
     function addSingleBarrier(block) {
-        block.appendValueInput('single_barrier')
+      block.appendValueInput('single_barrier')
         .appendField("Barrier :")
         .appendField(new Blockly.FieldDropdown([
           ["Offset +", "offset_plus"],
@@ -148,24 +166,23 @@ Blockly.Blocks['trade_settings'] = {
     }
 
     function addDoubleBarrier(block) {
-
-    block.appendValueInput('first_barrier')
+      block.appendValueInput('first_barrier')
         .appendField("Barrier 1 :")
         .appendField(new Blockly.FieldDropdown([
-        ["Offset +", "offset_plus"],
-        ["Offset -", "offset_minus"]
+          ["Offset +", "offset_plus"],
+          ["Offset -", "offset_minus"]
         ]), "barrier_direction_1");
 
-    block.appendValueInput('second_barrier')
+      block.appendValueInput('second_barrier')
         .appendField("Barrier 2 :")
         .appendField(new Blockly.FieldDropdown([
-        ["Offset -", "offset_minus"],
-        ["Offset +", "offset_plus"]
+          ["Offset +", "offset_plus"],
+          ["Offset -", "offset_minus"]
         ]), "barrier_direction_2");
     }
 
     function addGrowth(block) {
-        block.appendDummyInput("growth")
+      block.appendDummyInput("growth")
         .appendField("Growth Rate :")
         .appendField(new Blockly.FieldDropdown([
           ["1%", "1"],
@@ -175,38 +192,75 @@ Blockly.Blocks['trade_settings'] = {
         ]), "growth_unit");
     }
 
+    function addVanilla(block) {
+      block.appendDummyInput("vanila_barriers")
+        .appendField("Spot :")
+        .appendField(new Blockly.FieldDropdown([
+          ["Up", "up"],
+          ["Down", "down"]
+        ]), "vanila_direction");
+    }
+
+    // ----------------------------
+    // 🔧 Base Builders
+    // ----------------------------
+
+    const base = () => {
+      addDuration(this);
+    };
+
+    const finalize = () => {
+      addStake(this);
+    };
+
+    // ----------------------------
+    // 🔧 Category Logic
+    // ----------------------------
+
     switch (this.category) {
+
       case "Accumulator Up":
         addGrowth(this);
         addStake(this);
         break;
+
       case "Digit Match/Digit Differs":
-        addDuration(this);
-        addStake(this);
-        addDigit(this);
-        break;  
       case "High Tick/Low Tick":
-        addDuration(this);
-        addStake(this);
+        base();
         addDigit(this);
-        break;  
-      case "One Touch/No Touch": 
-        addDuration(this);
-        addStake(this);
+        finalize();
+        break;
+
+      case "One Touch/No Touch":
+      case "Higher/Lower":
+        base();
         addSingleBarrier(this);
+        finalize();
         break;
+
       case "Ends Between/Ends Outside":
-        addDuration(this);
-        addStake(this);
+      case "Stay Between/Goes Outside":
+        base();
         addDoubleBarrier(this);
+        finalize();
         break;
-      default:    
-        addDuration(this);
-        addStake(this);
+
+      case "Vanilla Long Call/Vanilla Long Put":
+        base();
+        addVanilla(this);
+        finalize();
+        break;
+
+      default:
+        base();
+        finalize();
         break;
     }
 
-    this.render();
+    // ✅ Force UI refresh
+    if (this.rendered) {
+      this.render();
+    }
   }
 };
 Blockly.Blocks['purchase'] = {
