@@ -10,6 +10,7 @@ let globalMarketData = {};       // categorized open-market data
 let isCodePanelVisible = false;
 let selectedAccountCurrency = 'USD';
 const subdata = {};              // contract sub-categories built from contracts_for
+let available_contracts = [];
 
 const APP_ID = '35751';
 const WS_URL = `wss://ws.derivws.com/websockets/v3?app_id=${APP_ID}`;
@@ -176,8 +177,8 @@ Blockly.Blocks['trade_settings'] = {
       block.appendValueInput('second_barrier')
         .appendField("Barrier 2 :")
         .appendField(new Blockly.FieldDropdown([
-          ["Offset +", "offset_plus"],
-          ["Offset -", "offset_minus"]
+          ["Offset -", "offset_minus"],
+          ["Offset +", "offset_plus"]
         ]), "barrier_direction_2");
     }
 
@@ -265,6 +266,9 @@ Blockly.Blocks['trade_settings'] = {
 };
 Blockly.Blocks['purchase'] = {
   init: function() {
+
+    this.updateShape_();
+
     this.appendDummyInput()
         .appendField("Purchase")
         .appendField(new Blockly.FieldDropdown([
@@ -273,6 +277,33 @@ Blockly.Blocks['purchase'] = {
 
     this.setPreviousStatement(true, null);
     this.setColour(230);
+  },
+
+    updateShape_: function () {
+    }
+};
+Blockly.Blocks['payout'] = {
+  init: function() {
+    this.appendDummyInput()
+        .appendField("Payout")
+        .appendField(new Blockly.FieldDropdown([["option","OPTIONNAME"], ["option","OPTIONNAME"]]), "payout_direction");
+    this.setInputsInline(false);
+    this.setOutput(true, null);
+    this.setColour(230);
+ this.setTooltip("");
+ this.setHelpUrl("");
+  }
+};
+Blockly.Blocks['askprice'] = {
+  init: function() {
+    this.appendDummyInput()
+        .appendField("Ask Price")
+        .appendField(new Blockly.FieldDropdown([["option","OPTIONNAME"], ["option","OPTIONNAME"]]), "payout_direction");
+    this.setInputsInline(false);
+    this.setOutput(true, null);
+    this.setColour(230);
+ this.setTooltip("");
+ this.setHelpUrl("");
   }
 };
 
@@ -896,6 +927,7 @@ function getContractForSymbol(symbol) {
 }
 
 function processContractsFor(data) {
+    available_contracts = data.contracts_for.available;
     if (data.error) {
         console.error('[Contract] API error:', data.error.message);
         showError(`Contract data error: ${data.error.message}`);
@@ -1220,19 +1252,94 @@ function block_change_detect() {
 }
 
 
- function secondCatupdateTrigger(block, newValue){
-    console.log("secondCatupdateTrigger",newValue);
-    let blocks = workspace.getBlocksByType('trade_settings', false);
+function secondCatupdateTrigger(block, newValue) {
+    console.log("secondCatupdateTrigger:", newValue);
+    //console.log("available_contracts:", available_contracts);
 
-    blocks.forEach(block => {
 
-        // 🔷 set category
-        block.category = newValue;
+    let options = [];
 
-        // 🔷 rebuild structure
-        block.updateShape_();
+    switch (newValue) {
+        case "Accumulator Up":
+            options = [["Accumulator", "ACCU"]]
+            break;
+        case "Asian Up/Asian Down":
+            options = [["Asian Up", "ASIANU"],["Asian Down", "ASIAND"]]
+            break;
+        case "Rise/Fall":
+            options = [["Rise","CALL"],["Fall","PUT"]]
+            break;
+        case "Higher/Lower (Equals)":
+            options = [["Higher Equals","CALLE"],["Lower Equals","PUTE"]]
+            break;
+        case "Digit Match/Digit Differs":
+            options = [["Digit Match","DIGITMATCH"],["Digit Differs","DIGITDIFF"]]
+            break;
+        case "Digit Odd/Digit Even":
+            options = [["Digit Odd","DIGITODD"],["Digit Even","DIGITEVEN"]]
+            break;
+        case "Digit Over/Digit Under":
+            options = [["Digit Over","DIGITOVER"],["Digit Under","DIGITUNDER"]]
+            break;
+        case "Ends Between/Ends Outside":
+            options = [["Ends Between","EXPIRYRANGE"],["Ends Outside","EXPIRYMISS"]]
+            break;
+        case "High Tick/Low Tick":
+            options = [["High Tick","TICKHIGH"],["Low Tick","TICKLOW"]]
+            break;
+        case "Multiply Up/Multiply Down":
+            options = [["Multiply Up","MULTUP"],["Multiply Down","MULTDOWN"]]
+            break;
+        case "Reset Call/Reset Put":
+            options = [["Reset Call","RESETCALL"],["Reset Put","RESETPUT"]]
+            break;
+        case "Only Up/Only Down":
+            options = [["Only Up","RUNHIGH"],["Only Down","RUNLOW"]]
+            break;
+        case "Stay Between/Goes Outside":
+            options = [["Stay Between","RANGE"],["Goes Outside","UPORDOWN"]]
+            break;
+        case "One Touch/No Touch":
+            options = [["One Touch","ONETOUCH"],["No Touch","NOTOUCH"]]
+            break;
+        case "Turbo Long/Turbo Short":
+            options = [["Turbo Long","TURBOSLONG"],["Turbo Short","TURBOSHORT"]]
+            break;
+        case "Vanilla Long Call/Vanilla Long Put":
+            options = [["Vanilla Long Call","VANILLALONGCALL"],["Vanilla Long Put","VANILLALONGPUT"]]
+            break;
+        default:
+            break;
+    }
 
-        // 🔷 force UI refresh
-        block.render();
+    workspace.getAllBlocks().forEach(block => {
+        if (block.type === 'purchase') {
+            let field = block.getField('purchase_direction');
+            if (field) {
+                console.log("field",field, options);
+                field.menuGenerator_ = options;
+                field.setValue(options[0][1]);
+                block.render(); // update UI
+            }
+        }
+        if (block.type === 'payout') {
+            let field = block.getField('payout_direction');
+            if (field) {
+                field.menuGenerator_ = options;
+                field.setValue(options[0][1]);
+                block.render(); // update UI
+            }
+        }
+        if (block.type === 'askprice') {
+            let field = block.getField('payout_direction');
+            if (field) {
+                field.menuGenerator_ = options;
+                field.setValue(options[0][1]);
+                block.render(); // update UI
+            }
+        }
     });
- }
+
+    
+
+}

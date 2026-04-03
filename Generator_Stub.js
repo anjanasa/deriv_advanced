@@ -56,7 +56,9 @@ javascript.javascriptGenerator.forBlock['askprice'] = function(block, generator)
 javascript.javascriptGenerator.forBlock['purchase'] = function(block, generator) {
   var dropdown_purchase_direction = block.getFieldValue('purchase_direction');
   // TODO: Assemble javascript into code variable.
-  var code = '...\n';
+  var code = `
+  let purchase_direction = "${dropdown_purchase_direction}";
+  `;
   return code;
 };
 
