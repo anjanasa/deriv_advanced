@@ -11,6 +11,10 @@ let isCodePanelVisible = false;
 let selectedAccountCurrency = 'USD';
 const subdata = {};              // contract sub-categories built from contracts_for
 let available_contracts = [];
+let purchaseOptions = [
+  ["Option", "OPTION"]
+];
+let GLOBAL_CATEGORY
 
 const APP_ID = '35751';
 const WS_URL = `wss://ws.derivws.com/websockets/v3?app_id=${APP_ID}`;
@@ -93,9 +97,13 @@ Blockly.Blocks['main_block'] = {
         this.setHelpUrl('');
     }
 };
+
 Blockly.Blocks['trade_settings'] = {
+
   init: function () {
-    this.category = null;
+
+    // ✅ Apply latest category when block is created
+    this.category = GLOBAL_CATEGORY;
 
     this.setPreviousStatement(true, null);
     this.setColour(230);
@@ -106,8 +114,26 @@ Blockly.Blocks['trade_settings'] = {
 
   setCategory: function (category) {
     if (this.category !== category) {
-      this.category = category;
+
+      //this.category = category;
+
+      // ✅ store globally
+      //GLOBAL_CATEGORY = category;
+
+      // ✅ Update ALL existing blocks (once)
+      const blocks = this.workspace.getBlocksByType('trade_settings', false);
+      blocks.forEach(block => {
+        if (block !== this) {
+          block.category = category;
+          block.updateShape_();
+        }
+      });
+
+      // ✅ Update THIS block
       this.updateShape_();
+
+      // ✅ Refresh toolbox so new blocks follow latest category
+      this.workspace.updateToolbox(this.workspace.options.languageTree);
     }
   },
 
@@ -133,7 +159,7 @@ Blockly.Blocks['trade_settings'] = {
     // 🔧 Input Builders
     // ----------------------------
 
-    function addDuration(block) {
+    const addDuration = (block) => {
       block.appendValueInput("duration")
         .appendField("Duration :")
         .appendField(new Blockly.FieldDropdown([
@@ -141,32 +167,32 @@ Blockly.Blocks['trade_settings'] = {
           ["Seconds", "s"],
           ["Minutes", "m"]
         ]), "duration_unit");
-    }
+    };
 
-    function addStake(block) {
+    const addStake = (block) => {
       block.appendValueInput("stake")
         .appendField("Stake :")
         .appendField(new Blockly.FieldDropdown([
           ["Stake", "stake"],
           ["Payout", "payout"]
         ]), "stake_unit");
-    }
+    };
 
-    function addDigit(block) {
+    const addDigit = (block) => {
       block.appendValueInput('digit')
         .appendField("Prediction :");
-    }
+    };
 
-    function addSingleBarrier(block) {
+    const addSingleBarrier = (block) => {
       block.appendValueInput('single_barrier')
         .appendField("Barrier :")
         .appendField(new Blockly.FieldDropdown([
           ["Offset +", "offset_plus"],
           ["Offset -", "offset_minus"]
         ]), "barrier_direction");
-    }
+    };
 
-    function addDoubleBarrier(block) {
+    const addDoubleBarrier = (block) => {
       block.appendValueInput('first_barrier')
         .appendField("Barrier 1 :")
         .appendField(new Blockly.FieldDropdown([
@@ -180,9 +206,9 @@ Blockly.Blocks['trade_settings'] = {
           ["Offset -", "offset_minus"],
           ["Offset +", "offset_plus"]
         ]), "barrier_direction_2");
-    }
+    };
 
-    function addGrowth(block) {
+    const addGrowth = (block) => {
       block.appendDummyInput("growth")
         .appendField("Growth Rate :")
         .appendField(new Blockly.FieldDropdown([
@@ -191,34 +217,36 @@ Blockly.Blocks['trade_settings'] = {
           ["5%", "5"],
           ["10%", "10"]
         ]), "growth_unit");
-    }
+    };
 
-    function addVanilla(block) {
+    const addVanilla = (block) => {
       block.appendDummyInput("vanila_barriers")
         .appendField("Spot :")
         .appendField(new Blockly.FieldDropdown([
           ["Up", "up"],
           ["Down", "down"]
         ]), "vanila_direction");
-    }
+    };
 
     // ----------------------------
     // 🔧 Base Builders
     // ----------------------------
 
-    const base = () => {
-      addDuration(this);
-    };
-
-    const finalize = () => {
-      addStake(this);
-    };
+    const base = () => addDuration(this);
+    const finalize = () => addStake(this);
 
     // ----------------------------
     // 🔧 Category Logic
     // ----------------------------
 
-    switch (this.category) {
+let mainBlocks = workspace.getBlocksByType("main_block");
+let category = null;
+
+if (mainBlocks.length > 0) {
+    category = mainBlocks[0].getFieldValue("second_category");
+}
+
+    switch (category) {
 
       case "Accumulator Up":
         addGrowth(this);
@@ -258,7 +286,7 @@ Blockly.Blocks['trade_settings'] = {
         break;
     }
 
-    // ✅ Force UI refresh
+    // ✅ Force UI refresh (safe)
     if (this.rendered) {
       this.render();
     }
@@ -267,43 +295,68 @@ Blockly.Blocks['trade_settings'] = {
 Blockly.Blocks['purchase'] = {
   init: function() {
 
-    this.updateShape_();
-
-    this.appendDummyInput()
+    this.appendDummyInput("main")
         .appendField("Purchase")
-        .appendField(new Blockly.FieldDropdown([
-          ["Option", "OPTION"]
-        ]), "purchase_direction");
+        .appendField(
+          new Blockly.FieldDropdown(() => purchaseOptions),
+          "purchase_direction"
+        );
 
     this.setPreviousStatement(true, null);
     this.setColour(230);
   },
 
-    updateShape_: function () {
+  updateShape_: function () {
+    const field = this.getField('purchase_direction');
+    if (field) {
+      field.menuGenerator_ = purchaseOptions;
+      field.setValue(purchaseOptions[0][1]); // reset safely
     }
+  }
+  
 };
 Blockly.Blocks['payout'] = {
   init: function() {
     this.appendDummyInput()
         .appendField("Payout")
-        .appendField(new Blockly.FieldDropdown([["option","OPTIONNAME"], ["option","OPTIONNAME"]]), "payout_direction");
+       .appendField(
+          new Blockly.FieldDropdown(() => purchaseOptions),
+          "purchase_direction"
+        );
     this.setInputsInline(false);
     this.setOutput(true, null);
     this.setColour(230);
  this.setTooltip("");
  this.setHelpUrl("");
+  },
+    updateShape_: function () {
+    const field = this.getField('purchase_direction');
+    if (field) {
+      field.menuGenerator_ = purchaseOptions;
+      field.setValue(purchaseOptions[0][1]); // reset safely
+    }
   }
 };
 Blockly.Blocks['askprice'] = {
   init: function() {
     this.appendDummyInput()
         .appendField("Ask Price")
-        .appendField(new Blockly.FieldDropdown([["option","OPTIONNAME"], ["option","OPTIONNAME"]]), "payout_direction");
+       .appendField(
+          new Blockly.FieldDropdown(() => purchaseOptions),
+          "purchase_direction"
+        );
     this.setInputsInline(false);
     this.setOutput(true, null);
     this.setColour(230);
  this.setTooltip("");
  this.setHelpUrl("");
+  },
+    updateShape_: function () {
+    const field = this.getField('purchase_direction');
+    if (field) {
+      field.menuGenerator_ = purchaseOptions;
+      field.setValue(purchaseOptions[0][1]); // reset safely
+    }
   }
 };
 
@@ -372,11 +425,33 @@ function onWorkspaceChange(event) {
     updateStats();
     if (isCodePanelVisible) updateGeneratedCode();
 
-    // --- Dropdown cascade (only on field changes) ---
     const block = workspace.getBlockById(event.blockId);
-    if (!block || block.type !== 'main_block') return;
+    if (!block) return;
 
-    // Auto-initialise second dropdown when the block is first created / loaded
+    // ✅ Handle BLOCK_CREATE first
+    if (event.type === Blockly.Events.BLOCK_CREATE) {
+        switch (block.type) {
+            case "purchase":
+                console.log("[Block] Purchase block created");
+
+                break;
+            case "main_block":
+                console.log("[Block] Main block created");
+
+                // Optional: initialize dropdowns immediately
+                const firstValue = block.getFieldValue('first_market');
+                if (firstValue && globalMarketData[firstValue]) {
+                    updateSecondDropdown(block, firstValue);
+                }
+                break;
+        }
+        return; // stop here for create events
+    }
+
+    // Only proceed for main_block after this
+    if (block.type !== 'main_block') return;
+
+    // Auto-init on load / non-field changes
     if (event.type !== Blockly.Events.CHANGE || event.element !== 'field') {
         try {
             const secondValue = block.getFieldValue('second_market');
@@ -386,33 +461,35 @@ function onWorkspaceChange(event) {
                     updateSecondDropdown(block, firstValue);
                 }
             }
-        } catch (_) { /* block may not have these fields yet */ }
+        } catch (_) {}
         return;
     }
 
+    // --- Field change handling ---
     switch (event.name) {
         case 'first_market':
             updateSecondDropdown(block, event.newValue);
             break;
+
         case 'second_market':
             updateThirdDropdown(block, event.newValue);
             break;
+
         case 'third_market':
             console.log('[Market] Third market changed to:', event.newValue);
             getContractForSymbol(event.newValue);
             break;
+
         case 'first_category':
             console.log('[Contract] First category changed to:', event.newValue);
             updateSecondCategoryDropdown(block, event.newValue);
             break;
+
         case 'second_category':
             secondCatupdateTrigger(block, event.newValue);
             break;
-        default:
-            break;
     }
 }
-
 /* ─── WebSocket ──────────────────────────────────────────────────────────── */
 
 /** Create (or recreate) the WebSocket and attach handlers. */
@@ -1255,6 +1332,7 @@ function block_change_detect() {
 function secondCatupdateTrigger(block, newValue) {
     console.log("secondCatupdateTrigger:", newValue);
     //console.log("available_contracts:", available_contracts);
+    GLOBAL_CATEGORY = newValue;
 
 
     let options = [];
@@ -1268,6 +1346,9 @@ function secondCatupdateTrigger(block, newValue) {
             break;
         case "Rise/Fall":
             options = [["Rise","CALL"],["Fall","PUT"]]
+            break;
+        case "Higher/Lower":
+            options = [["Higher","CALL"],["Lower","PUT"]]
             break;
         case "Higher/Lower (Equals)":
             options = [["Higher Equals","CALLE"],["Lower Equals","PUTE"]]
@@ -1312,34 +1393,23 @@ function secondCatupdateTrigger(block, newValue) {
             break;
     }
 
-    workspace.getAllBlocks().forEach(block => {
-        if (block.type === 'purchase') {
-            let field = block.getField('purchase_direction');
-            if (field) {
-                console.log("field",field, options);
-                field.menuGenerator_ = options;
-                field.setValue(options[0][1]);
-                block.render(); // update UI
-            }
-        }
-        if (block.type === 'payout') {
-            let field = block.getField('payout_direction');
-            if (field) {
-                field.menuGenerator_ = options;
-                field.setValue(options[0][1]);
-                block.render(); // update UI
-            }
-        }
-        if (block.type === 'askprice') {
-            let field = block.getField('payout_direction');
-            if (field) {
-                field.menuGenerator_ = options;
-                field.setValue(options[0][1]);
-                block.render(); // update UI
-            }
-        }
-    });
+    purchaseOptions = options
 
+      // ✅ Update ALL existing blocks
+  let blocks = workspace.getBlocksByType('purchase', false);
+  blocks.forEach(block => {
+    block.updateShape_();
+  });
+  blocks = workspace.getBlocksByType('payout', false);
+  blocks.forEach(block => {
+    block.updateShape_();
+  });
+  blocks = workspace.getBlocksByType('askprice', false);
+  blocks.forEach(block => {
+    block.updateShape_();
+  });
+  // ✅ Refresh toolbox so NEW blocks use updated dropdown
+  workspace.updateToolbox(workspace.options.languageTree);
     
 
 }
