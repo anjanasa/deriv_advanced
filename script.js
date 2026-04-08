@@ -33,6 +33,9 @@ let bot_trade_settings = {
   vanila_barriers: '',
 };
 
+//bot Fuctions
+let assign_bot_variables;
+
 const APP_ID = '35751';
 const WS_URL = `wss://ws.derivws.com/websockets/v3?app_id=${APP_ID}`;
 
@@ -1443,7 +1446,21 @@ function runBot() {
   is_bot_running = true;
   is_bot_onTrade = false;
 
-  console.log("getting market data");
+  // Run code generation first — the main_block generator assigns assign_bot_variables as a side-effect.
+  try {
+    javascript.javascriptGenerator.workspaceToCode(workspace);
+  } catch (err) {
+    console.warn('[Bot] Code generation error during runBot:', err);
+  }
+
+  if (typeof assign_bot_variables !== 'function') {
+    console.error('[Bot] assign_bot_variables is not set — make sure a Main Block exists in the workspace.');
+    is_bot_running = false;
+    return;
+  }
+
+  assign_bot_variables();
+  console.log(bot_trade_settings);
 
   getMarketData()
     .then(() => {
@@ -1456,7 +1473,11 @@ function runBot() {
     });
 }
 
-
+function getMarketData() {
+  return new Promise((resolve, reject) => {
+    
+  })
+}
 
 
 
@@ -1994,13 +2015,17 @@ javascript.javascriptGenerator.forBlock['main_block'] = function(block, generato
   var statements_watch_sell = generator.statementToCode(block, 'watch_sell');
   var statements_trade_again = generator.statementToCode(block, 'trade_again');
   // TODO: Assemble javascript into code variable.
+
+  //assign bot varibles
+  assign_bot_variables = () => {
+  bot_trade_settings.market = dropdown_third_market,
+  bot_trade_settings.category = dropdown_second_category,
+  bot_trade_settings.contract_type = dropdown_contract_type,
+  bot_trade_settings.candle_interval = dropdown_candle_interval,
+  bot_trade_settings.restart_buy_sell_on_error = checkbox_buy_sell_error,
+  bot_trade_settings.restart_last_trade_on_error = checkbox_last_trade_on_error
+  };
   var code = `
-  bot_trade_settings.market = ${dropdown_third_market}
-  bot_trade_settings.category = ${dropdown_second_category}
-  bot_trade_settings.contract_type = ${dropdown_contract_type}
-  bot_trade_settings.candle_interval = ${dropdown_candle_interval}
-  bot_trade_settings.restart_buy_sell_on_error = ${checkbox_buy_sell_error}
-  bot_trade_settings.restart_last_trade_on_error = ${checkbox_last_trade_on_error}
 
   function runOnce(){
     ${statements_run_once}
@@ -2033,6 +2058,7 @@ javascript.javascriptGenerator.forBlock['notify_telegram'] = function(block, gen
   var code = '...\n';
   return code;
 };
+
 
 javascript.javascriptGenerator.forBlock['ignore'] = function(block, generator) {
   var statements_ignore = generator.statementToCode(block, 'ignore');
