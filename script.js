@@ -33,8 +33,27 @@ let bot_trade_settings = {
   vanila_barriers: '',
 };
 
-//bot Fuctions
+let bot_functions = {
+  assign_bot_variables_f: () => {
+    console.log("assign_bot_variables");
+  },
+  runOnceAtStart_f: () => {
+    console.log("runOnceAtStart");
+  },
+  watchAndPurchase_f: () => {
+    console.log("watchAndPurchase");
+  },
+  watchAndSell_f: () => {
+    console.log("watchAndSell");
+  },
+  tradeAgain_f: () => {
+    console.log("tradeAgain");
+  }
+};
+
 let assign_bot_variables;
+
+
 
 const APP_ID = '35751';
 const WS_URL = `wss://ws.derivws.com/websockets/v3?app_id=${APP_ID}`;
@@ -2016,34 +2035,26 @@ javascript.javascriptGenerator.forBlock['main_block'] = function(block, generato
   var statements_trade_again = generator.statementToCode(block, 'trade_again');
   // TODO: Assemble javascript into code variable.
 
-  //assign bot varibles
-  assign_bot_variables = () => {
-  bot_trade_settings.market = dropdown_third_market,
-  bot_trade_settings.category = dropdown_second_category,
-  bot_trade_settings.contract_type = dropdown_contract_type,
-  bot_trade_settings.candle_interval = dropdown_candle_interval,
-  bot_trade_settings.restart_buy_sell_on_error = checkbox_buy_sell_error,
-  bot_trade_settings.restart_last_trade_on_error = checkbox_last_trade_on_error
-  };
   var code = `
 
-  function runOnce(){
+  bot_functions.assign_bot_variables_f = () => {
+  bot_trade_settings.market = '${dropdown_third_market}'
+  bot_trade_settings.category = '${dropdown_second_category}'
+  bot_trade_settings.contract_type = '${dropdown_contract_type}'
+  bot_trade_settings.candle_interval = '${dropdown_candle_interval}'
+  bot_trade_settings.restart_buy_sell_on_error = ${checkbox_buy_sell_error},
+  bot_trade_settings.restart_last_trade_on_error = ${checkbox_last_trade_on_error}
+  }
+  bot_functions.runOnceAtStart_f = () => {
     ${statements_run_once}
   }
-
-  function tradeOptions(){
-    ${statements_trade_options}
-  }
-
-  function watchPurchase(){
+  bot_functions.watchAndPurchase_f = () => {
     ${statements_watch_purchase}
   }
-
-  function watchSell(){
+  bot_functions.watchAndSell_f = () => {
     ${statements_watch_sell}
   }
-
-  function tradeAgain(){
+  bot_functions.tradeAgain_f = () => {
     ${statements_trade_again}
   }
   `;
