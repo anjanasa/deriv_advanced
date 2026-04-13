@@ -24,3 +24,5 @@ script copy.js
 .DS_Store
 Thumbs.db
 .aider*
+groq_agent.py
+./groq_agent.py
