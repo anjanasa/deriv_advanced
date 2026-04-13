@@ -15,9 +15,8 @@ let purchaseOptions = [
   ["Option", "OPTION"]
 ];
 let GLOBAL_CATEGORY
-
-let is_bot_running = false;
-let is_bot_onTrade = false;
+let rawticklist
+let trade_again = true
 
 //trading settings
 let bot_trade_settings = {
@@ -28,9 +27,15 @@ let bot_trade_settings = {
   stake_unit: '',
   digit: '',
   single_barrier: '',
+  barrier_direction: '',
   first_barrier: '',
   second_barrier: '',
+  barrier_direction_1: '',
+  barrier_direction_2: '',
   vanila_barriers: '',
+  is_bot_running: false,
+  is_bot_on_trade: false,
+  bot_purchase_direction: ''
 };
 
 let bot_functions = {
@@ -64,6 +69,7 @@ let pingSentTime = null;
 let previousPing = null;
 let isLoadingScreenVisible = true;
 let isReconnecting = false;
+let pendingMarketSubscriptionResolve = null;
 
 /* ─── Blockly Dynamic Dropdown Data ─────────────────────────────────────── */
 const PLACEHOLDER_OPTIONS = [['Loading…', 'LOADING']];
@@ -604,6 +610,9 @@ function handleSocketMessage(event) {
         case 'ping':           handlePing();                 break;
         case 'active_symbols': processActiveSymbols(data);   break;
         case 'contracts_for':  processContractsFor(data);    break;
+        case 'history':        processTicksHistory(data);    break;
+        case 'ticks_history':  processTicksHistory(data);    break;
+        case "tick":           processTicks(data);           break;
         default:
             // Silently ignore message types we don't handle
             break;
@@ -622,6 +631,33 @@ function handleAuthorize(data) {
     }
     afterAuthorized(data);
     getActiveMarkets();
+}
+
+function processTicks(data) {
+    //console.log("ticks received", data);
+    rawticklist.push(data.tick.ask,data.tick.epoch);
+    if (rawticklist.length > 100) {
+      //console.log('data exceeded')
+      rawticklist.splice(0, rawticklist.length - 100);
+    }
+    //console.log(rawticklist)
+    BotCallingEachTick()
+}
+
+function processTicksHistory(data) {
+    console.log("ticks_history received", data);
+    rawticklist = [];
+    if (typeof pendingMarketSubscriptionResolve === 'function') {
+      pendingMarketSubscriptionResolve(data);
+      pendingMarketSubscriptionResolve = null;
+      let ticks = data.history;
+      for (let i = 0; i < ticks.prices.length; i++) {
+        const tick = ticks.prices[i];
+        const time = ticks.times[i];
+        rawticklist.push({tick,time})
+      }
+      //console.log(rawticklist)
+    }
 }
 
 function handleBalance(data) {
@@ -1459,54 +1495,132 @@ function secondCatupdateTrigger(block, newValue) {
 
 
 
-function runBot() {
+async function runBot() {
   console.log("run bot clicked variables reset");
-
-  is_bot_running = true;
-  is_bot_onTrade = false;
-
   // Run code generation first — the main_block generator assigns assign_bot_variables as a side-effect.
   try {
-    javascript.javascriptGenerator.workspaceToCode(workspace);
+    let code = javascript.javascriptGenerator.workspaceToCode(workspace);
+    eval(code);
+    bot_functions.assign_bot_variables_f();
+    console.log(bot_trade_settings);
+    await unsubscribeFromMarket();
+    await subscribeToMarket();
+    await call_run_once();
+    console.log('ready to call trade options')
+    if (trade_again) {
+      await tradeOption()
+    }
+
+    bot_trade_settings.is_bot_running = true;
+    bot_trade_settings.is_bot_on_trade = false;
   } catch (err) {
     console.warn('[Bot] Code generation error during runBot:', err);
   }
 
-  if (typeof assign_bot_variables !== 'function') {
-    console.error('[Bot] assign_bot_variables is not set — make sure a Main Block exists in the workspace.');
-    is_bot_running = false;
-    return;
+}
+
+
+function BotCallingEachTick() {
+  if (bot_trade_settings.is_bot_running === true && bot_trade_settings.is_bot_on_trade === false) {
+    console.log('watch and purchased called')
+    bot_functions.watchAndPurchase_f()
+  }
+}
+
+async function unsubscribeFromMarket() {
+  if (!bot_trade_settings.currunt_subscribe_id) return;
+  await new Promise((resolve) => {
+    socket.send(JSON.stringify({
+      forget_all: "ticks"
+    }));
+    console.log("unsubscribing from market");
+    console.log("unsubscribed from market");
+    resolve();
+  });
+}
+async function subscribeToMarket() {
+  await new Promise((resolve, reject) => {
+    pendingMarketSubscriptionResolve = resolve;
+    const timeout = setTimeout(() => {
+      if (pendingMarketSubscriptionResolve) {
+        pendingMarketSubscriptionResolve = null;
+        reject(new Error("Timed out waiting for market history"));
+      }
+    }, 10000);
+
+    const originalResolve = resolve;
+    pendingMarketSubscriptionResolve = (payload) => {
+      clearTimeout(timeout);
+      originalResolve(payload);
+    };
+
+    socket.send(JSON.stringify({
+      "ticks_history": bot_trade_settings.market,
+      "adjust_start_time": 1,
+      "count": 100,
+      "end": "latest",
+      "start": 1,
+      "style": "ticks",
+      "subscribe": 1
+    }));
+    console.log("subscribing to market");
+  });
+}
+async function call_run_once() {
+  bot_functions.runOnceAtStart_f()
+  console.log('called run once')
+}
+async function tradeOption() {
+  await bot_functions.tradeOptions_f()
+  console.log('calledtrade options')
+let data;
+  if (GLOBAL_CATEGORY == "Rise/Fall") {
+    data = {
+      "proposal": 1,
+      "amount": bot_trade_settings.stake,
+      "basis": bot_trade_settings.stake_unit,
+      "contract_type": "CALL",
+      "currency": "USD",
+      "duration": bot_trade_settings.duration,
+      "duration_unit": bot_trade_settings.duration_unit,
+      "symbol": bot_trade_settings.market
+    }
+    socket.send(JSON.stringify(data));
+    data = {
+      "proposal": 1,
+      "amount": bot_trade_settings.stake,
+      "basis": bot_trade_settings.stake_unit,
+      "contract_type": "PUT",
+      "currency": "USD",
+      "duration": bot_trade_settings.duration,
+      "duration_unit": bot_trade_settings.duration_unit,
+      "symbol": bot_trade_settings.market
+    }
+    socket.send(JSON.stringify(data));
+  }
+}
+
+
+async function bot_place_trade(direction) {
+
+  console.log('calling to purchase ', direction, GLOBAL_CATEGORY)
+  let data;
+  if (GLOBAL_CATEGORY == "Rise/Fall") {
+    data = {
+      "proposal": 1,
+      "amount": bot_trade_settings.stake,
+      "basis": bot_trade_settings.stake_unit,
+      "contract_type": direction,
+      "currency": "USD",
+      "duration": bot_trade_settings.duration,
+      "duration_unit": bot_trade_settings.duration_unit,
+      "symbol": bot_trade_settings.market
+    }
   }
 
-  assign_bot_variables();
-  console.log(bot_trade_settings);
 
-  getMarketData()
-    .then(() => {
-      console.log("market data received");
-      // startTradingCycle();
-    })
-    .catch((error) => {
-      console.error("Error getting market data:", error);
-      is_bot_running = false;
-    });
+  //socket.send(JSON.stringify(data))
 }
-
-function getMarketData() {
-  return new Promise((resolve, reject) => {
-    
-  })
-}
-
-
-
-
-
-
-
-
-
-
 
 
 
@@ -1528,30 +1642,86 @@ function getMarketData() {
 
 
 javascript.javascriptGenerator.forBlock['trade_settings'] = function(block, generator) {
-  if (block.category === "Accumulator Up") {
-    var dropdown_duration_unit = block.getFieldValue('duration_unit');
-    var dropdown_stake_unit = block.getFieldValue('stake_unit');
-    var value_stake = generator.valueToCode(block, 'stake', javascript.Order.ATOMIC);
-    var code = `
-    duration_unit = "${dropdown_duration_unit}";
-    stake_unit = "${dropdown_stake_unit}";
-    stake = ${value_stake};
-    `;
-  }else{
-    var dropdown_duration_unit = block.getFieldValue('duration_unit');
-    var value_duration = generator.valueToCode(block, 'duration', javascript.Order.ATOMIC);
-    var dropdown_stake_unit = block.getFieldValue('stake_unit');
-    var value_stake = generator.valueToCode(block, 'stake', javascript.Order.ATOMIC);
-    var code = `
-    duration_unit = "${dropdown_duration_unit}";
-    duration = ${value_duration};
-    stake_unit = "${dropdown_stake_unit}";
-    stake = ${value_stake};
-    `;
-  }
-  // TODO: Assemble javascript into code variable.
+  const category = block.category;
+  const dropdown_stake_unit = block.getFieldValue('stake_unit');
+  const value_stake = generator.valueToCode(block, 'stake', javascript.Order.ATOMIC);
+  const stakeLines =
+    '\n    bot_trade_settings.stake_unit = "' + dropdown_stake_unit + '";' +
+    '\n    bot_trade_settings.stake = ' + value_stake + ';';
 
-  return code;
+  switch (category) {
+    case "Accumulator Up": {
+      const growth_unit = block.getFieldValue('growth_unit');
+      return (
+        '\n    bot_trade_settings.growth = "' + growth_unit + '";' +
+        stakeLines
+      );
+    }
+    case "Digit Match/Digit Differs":
+    case "High Tick/Low Tick": {
+      const dropdown_duration_unit = block.getFieldValue('duration_unit');
+      const value_duration = generator.valueToCode(block, 'duration', javascript.Order.ATOMIC);
+      const value_digit = generator.valueToCode(block, 'digit', javascript.Order.ATOMIC);
+      return (
+        '\n    bot_trade_settings.duration_unit = "' + dropdown_duration_unit + '";' +
+        '\n    bot_trade_settings.duration = ' + value_duration + ';' +
+        '\n    bot_trade_settings.digit = ' + value_digit + ';' +
+        stakeLines
+      );
+    }
+    case "One Touch/No Touch":
+    case "Higher/Lower": {
+      const dropdown_duration_unit = block.getFieldValue('duration_unit');
+      const value_duration = generator.valueToCode(block, 'duration', javascript.Order.ATOMIC);
+      const barrier_direction = block.getFieldValue('barrier_direction');
+      const value_single_barrier = generator.valueToCode(block, 'single_barrier', javascript.Order.ATOMIC);
+      return (
+        '\n    bot_trade_settings.duration_unit = "' + dropdown_duration_unit + '";' +
+        '\n    bot_trade_settings.duration = ' + value_duration + ';' +
+        '\n    bot_trade_settings.barrier_direction = "' + barrier_direction + '";' +
+        '\n    bot_trade_settings.single_barrier = ' + value_single_barrier + ';' +
+        stakeLines
+      );
+    }
+    case "Ends Between/Ends Outside":
+    case "Stay Between/Goes Outside": {
+      const dropdown_duration_unit = block.getFieldValue('duration_unit');
+      const value_duration = generator.valueToCode(block, 'duration', javascript.Order.ATOMIC);
+      const barrier_direction_1 = block.getFieldValue('barrier_direction_1');
+      const barrier_direction_2 = block.getFieldValue('barrier_direction_2');
+      const value_first_barrier = generator.valueToCode(block, 'first_barrier', javascript.Order.ATOMIC);
+      const value_second_barrier = generator.valueToCode(block, 'second_barrier', javascript.Order.ATOMIC);
+      return (
+        '\n    bot_trade_settings.duration_unit = "' + dropdown_duration_unit + '";' +
+        '\n    bot_trade_settings.duration = ' + value_duration + ';' +
+        '\n    bot_trade_settings.barrier_direction_1 = "' + barrier_direction_1 + '";' +
+        '\n    bot_trade_settings.barrier_direction_2 = "' + barrier_direction_2 + '";' +
+        '\n    bot_trade_settings.first_barrier = ' + value_first_barrier + ';' +
+        '\n    bot_trade_settings.second_barrier = ' + value_second_barrier + ';' +
+        stakeLines
+      );
+    }
+    case "Vanilla Long Call/Vanilla Long Put": {
+      const dropdown_duration_unit = block.getFieldValue('duration_unit');
+      const value_duration = generator.valueToCode(block, 'duration', javascript.Order.ATOMIC);
+      const vanila_direction = block.getFieldValue('vanila_direction');
+      return (
+        '\n    bot_trade_settings.duration_unit = "' + dropdown_duration_unit + '";' +
+        '\n    bot_trade_settings.duration = ' + value_duration + ';' +
+        '\n    bot_trade_settings.vanila_barriers = "' + vanila_direction + '";' +
+        stakeLines
+      );
+    }
+    default: {
+      const dropdown_duration_unit = block.getFieldValue('duration_unit');
+      const value_duration = generator.valueToCode(block, 'duration', javascript.Order.ATOMIC);
+      return (
+        '\n    bot_trade_settings.duration_unit = "' + dropdown_duration_unit + '";' +
+        '\n    bot_trade_settings.duration = ' + value_duration + ';' +
+        stakeLines
+      );
+    }
+  }
 };
 
 javascript.javascriptGenerator.forBlock['virtual_hook'] = function(block, generator) {
@@ -1586,11 +1756,10 @@ javascript.javascriptGenerator.forBlock['purchase'] = function(block, generator)
   var dropdown_purchase_direction = block.getFieldValue('purchase_direction');
   // TODO: Assemble javascript into code variable.
   var code = `
-  let purchase_direction = "${dropdown_purchase_direction}";
+  bot_place_trade("${dropdown_purchase_direction}");
   `;
   return code;
 };
-
 javascript.javascriptGenerator.forBlock['go__to_the_trade_option'] = function(block, generator) {
   // TODO: Assemble javascript into code variable.
   var code = '...\n';
@@ -2048,11 +2217,14 @@ javascript.javascriptGenerator.forBlock['main_block'] = function(block, generato
   bot_functions.runOnceAtStart_f = () => {
     ${statements_run_once}
   }
+  bot_functions.tradeOptions_f = () => {
+    ${statements_trade_options}
+    }
   bot_functions.watchAndPurchase_f = () => {
     ${statements_watch_purchase}
   }
   bot_functions.watchAndSell_f = () => {
-    ${statements_watch_sell}
+    ${statements_watch_sell}  
   }
   bot_functions.tradeAgain_f = () => {
     ${statements_trade_again}
