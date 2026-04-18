@@ -37,7 +37,8 @@ let bot_trade_settings = {
   is_bot_running: false,
   is_bot_on_trade: false,
   bot_purchase_direction: '',
-  proposal_data_called: false
+  proposal_data_called: false,
+  currency: 'USD'
 };
 
 // Set to true when the user explicitly clicks Stop Bot.
@@ -784,6 +785,7 @@ function afterAuthorized(data) {
     if (current && (!current.account || current.account === 'Token Login')) {
       current.account = loginid;
       current.currency = currency;
+      bot_trade_settings.currency = currency
     }
   }
 
@@ -1221,6 +1223,7 @@ function processContractsFor(data) {
 /** Map a contract item to its display group name. */
 function _getContractGroupName(item) {
   const t = item.contract_type;
+  if (t === 'ACCU') return 'Accumulators';
   if (t === 'CALL' || t === 'PUT') return 'Higher/Lower';
   if (t === 'CALLE' || t === 'PUTE') return 'Higher/Lower (Equals)';
   if (t === 'MULTUP' || t === 'MULTDOWN') return 'Multiply Up/Multiply Down';
@@ -1228,8 +1231,7 @@ function _getContractGroupName(item) {
   if (t === 'DIGITOVER' || t === 'DIGITUNDER') return 'Digit Over/Digit Under';
   if (t.includes('DIGITMATCH') || t.includes('DIGITDIFF')) return 'Digit Match/Digit Differs';
   if (t.includes('DIGITODD') || t.includes('DIGITEVEN')) return 'Digit Odd/Digit Even';
-  if (t === 'EXPIRYRANGE' || t === 'EXPIRYMISS' ||
-    t === 'EXPIRYRANGEE' || t === 'EXPIRYMISSE') return 'Ends Between/Ends Outside';
+  if (t === 'EXPIRYRANGE' || t === 'EXPIRYMISS') return 'Ends Between/Ends Outside';
   if (t === 'TICKHIGH' || t === 'TICKLOW') return 'High Tick/Low Tick';
   if (t === 'RESETCALL' || t === 'RESETPUT') return 'Reset Call/Reset Put';
   if (t === 'RUNHIGH' || t === 'RUNLOW') return 'Only Up/Only Down';
@@ -1734,14 +1736,14 @@ function updateBotButton() {
   const runBtn = document.getElementById('botRunBtn');
   if (!runBtn) return;
   const runBtnSpan = runBtn.querySelector('span');
-  const runBtnSvg  = runBtn.querySelector('svg');
+  const runBtnSvg = runBtn.querySelector('svg');
   if (bot_trade_settings.is_bot_running) {
     if (runBtnSpan) runBtnSpan.textContent = 'STOP BOT';
-    if (runBtnSvg)  runBtnSvg.innerHTML   = '<path d="M6 6h12v12H6z"/>';
+    if (runBtnSvg) runBtnSvg.innerHTML = '<path d="M6 6h12v12H6z"/>';
     runBtn.classList.add('running');
   } else {
     if (runBtnSpan) runBtnSpan.textContent = 'START BOT';
-    if (runBtnSvg)  runBtnSvg.innerHTML   = '<path d="M8 5v14l11-7z"/>';
+    if (runBtnSvg) runBtnSvg.innerHTML = '<path d="M8 5v14l11-7z"/>';
     runBtn.classList.remove('running');
   }
 }
@@ -1769,7 +1771,7 @@ async function runBot() {
     await call_run_once();
     console.log('[Bot] Ready to call trade options');
 
-    bot_trade_settings.is_bot_running  = true;
+    bot_trade_settings.is_bot_running = true;
     bot_trade_settings.is_bot_on_trade = false;
     updateBotButton();
 
@@ -1802,11 +1804,11 @@ async function bot_trade_closed(response) {
   console.log('[Bot] bot_trade_closed called', response);
 
   // Reset per-trade state
-  bot_trade_settings.proposal_data_called  = false;
-  bot_trade_settings.currunt_subscribe_id  = null;
-  bot_trade_settings.currunt_purchase_id   = null;
-  bot_trade_settings.currunt_sell_id       = null;
-  bot_trade_settings.is_bot_on_trade       = false;
+  bot_trade_settings.proposal_data_called = false;
+  bot_trade_settings.currunt_subscribe_id = null;
+  bot_trade_settings.currunt_purchase_id = null;
+  bot_trade_settings.currunt_sell_id = null;
+  bot_trade_settings.is_bot_on_trade = false;
 
   // ── Check if the user stopped the bot ──
   // Both the Stop button and mid-trade errors set is_bot_running=false / userStoppedBot=true.
@@ -1901,7 +1903,7 @@ async function tradeOption() {
       duration_unit: bot_trade_settings.duration_unit || "s",
       symbol: bot_trade_settings.market || "R_100"
     });
-    console.log('Proposal data received:', proposalData);
+    //console.log('Proposal data received:', proposalData);
     // You can use the proposal data here for further processing
     bot_trade_settings.proposal_data_called = true;
   } catch (error) {
@@ -1914,25 +1916,287 @@ async function getProposalData(params) {
     // Generate a unique request ID
     const req_id = Date.now() + Math.floor(Math.random() * 1000);
 
-    const request = {
+    const req1 = {
       proposal: 1,
-      amount: params.amount,
-      barrier: params.barrier,
-      basis: params.basis,
-      contract_type: params.contract_type,
-      currency: params.currency,
-      duration: params.duration,
-      duration_unit: params.duration_unit,
+      symbol: params.symbol,
+      req_id: req_id
+    };
+    const req2 = {
+      proposal: 1,
       symbol: params.symbol,
       req_id: req_id
     };
 
+    switch (GLOBAL_CATEGORY) {
+      case "Accumulators":
+        req1.contract_type = "ACCU";
+        req1.amount = bot_trade_settings.stake;
+        req1.basis = bot_trade_settings.stake_unit;
+        req1.currency = bot_trade_settings.currency || "USD";
+        req1.duration = bot_trade_settings.duration;
+        req1.duration_unit = bot_trade_settings.duration_unit;
+        break;
+      case "Rise/Fall":
+        req1.contract_type = "CALL";
+        req1.amount = bot_trade_settings.stake;
+        req1.basis = bot_trade_settings.stake_unit;
+        req1.currency = bot_trade_settings.currency || "USD";
+        req1.duration = bot_trade_settings.duration;
+        req1.duration_unit = bot_trade_settings.duration_unit;
+
+        req2.contract_type = "PUT";
+        req2.amount = bot_trade_settings.stake;
+        req2.basis = bot_trade_settings.stake_unit;
+        req2.currency = bot_trade_settings.currency || "USD";
+        req2.duration = bot_trade_settings.duration;
+        req2.duration_unit = bot_trade_settings.duration_unit;
+        break;
+      case "Higher/Lower":
+        req1.contract_type = "CALLE";
+        req1.amount = bot_trade_settings.stake;
+        req1.basis = bot_trade_settings.stake_unit;
+        req1.currency = bot_trade_settings.currency;
+        req1.duration = bot_trade_settings.duration;
+        req1.duration_unit = bot_trade_settings.duration_unit;
+        req1.barrier = bot_trade_settings.barrier;
+
+        req2.contract_type = "PUTE";
+        req2.amount = bot_trade_settings.stake;
+        req2.basis = bot_trade_settings.stake_unit;
+        req2.currency = bot_trade_settings.currency;
+        req2.duration = bot_trade_settings.duration;
+        req2.duration_unit = bot_trade_settings.duration_unit;
+        req2.barrier = bot_trade_settings.barrier;
+        break;
+      case "Multiply Up/Multiply Down":
+        req1.contract_type = "MULTUP";
+        req1.amount = bot_trade_settings.stake;
+        req1.basis = bot_trade_settings.stake_unit;
+        req1.currency = bot_trade_settings.currency;
+        req1.duration = bot_trade_settings.duration;
+        req1.duration_unit = bot_trade_settings.duration_unit;
+
+        req2.contract_type = "MULTDOWN";
+        req2.amount = bot_trade_settings.stake;
+        req2.basis = bot_trade_settings.stake_unit;
+        req2.currency = bot_trade_settings.currency;
+        req2.duration = bot_trade_settings.duration;
+        req2.duration_unit = bot_trade_settings.duration_unit;
+        break;
+      case "Asian Up/Asian Down":
+        req1.contract_type = "ASIANU";
+        req1.amount = bot_trade_settings.stake;
+        req1.basis = bot_trade_settings.stake_unit;
+        req1.currency = bot_trade_settings.currency;
+        req1.duration = bot_trade_settings.duration;
+        req1.duration_unit = bot_trade_settings.duration_unit;
+
+        req2.contract_type = "ASIAND";
+        req2.amount = bot_trade_settings.stake;
+        req2.basis = bot_trade_settings.stake_unit;
+        req2.currency = bot_trade_settings.currency;
+        req2.duration = bot_trade_settings.duration;
+        req2.duration_unit = bot_trade_settings.duration_unit;
+        break;
+      case "Digit Over/Digit Under":
+        req1.contract_type = "DIGITOVER";
+        req1.amount = bot_trade_settings.stake;
+        req1.basis = bot_trade_settings.stake_unit;
+        req1.currency = bot_trade_settings.currency;
+        req1.duration = bot_trade_settings.duration;
+        req1.duration_unit = bot_trade_settings.duration_unit;
+        req1.barrier = bot_trade_settings.predection;
+
+        req2.contract_type = "DIGITUNDER";
+        req2.amount = bot_trade_settings.stake;
+        req2.basis = bot_trade_settings.stake_unit;
+        req2.currency = bot_trade_settings.currency;
+        req2.duration = bot_trade_settings.duration;
+        req2.duration_unit = bot_trade_settings.duration_unit;
+        req2.barrier = bot_trade_settings.predection;
+        break;
+      case "Digit Match/Digit Differs":
+        req1.contract_type = "DIGITMATCH";
+        req1.amount = bot_trade_settings.stake;
+        req1.basis = bot_trade_settings.stake_unit;
+        req1.currency = bot_trade_settings.currency;
+        req1.duration = bot_trade_settings.duration;
+        req1.duration_unit = bot_trade_settings.duration_unit;
+
+        req2.contract_type = "DIGITDIFF";
+        req2.amount = bot_trade_settings.stake;
+        req2.basis = bot_trade_settings.stake_unit;
+        req2.currency = bot_trade_settings.currency;
+        req2.duration = bot_trade_settings.duration;
+        req2.duration_unit = bot_trade_settings.duration_unit;
+        break;
+      case "Digit Odd/Digit Even":
+        req1.contract_type = "DIGITODD";
+        req1.amount = bot_trade_settings.stake;
+        req1.basis = bot_trade_settings.stake_unit;
+        req1.currency = bot_trade_settings.currency;
+        req1.duration = bot_trade_settings.duration;
+        req1.duration_unit = bot_trade_settings.duration_unit;
+        req1.barrier = bot_trade_settings.predection;
+
+        req2.contract_type = "DIGITEVEN";
+        req2.amount = bot_trade_settings.stake;
+        req2.basis = bot_trade_settings.stake_unit;
+        req2.currency = bot_trade_settings.currency;
+        req2.duration = bot_trade_settings.duration;
+        req2.duration_unit = bot_trade_settings.duration_unit;
+        req2.barrier = bot_trade_settings.predection;
+        break;
+      case "Ends Between/Ends Outside":
+        req1.contract_type = "EXPIRYRANGE";
+        req1.amount = bot_trade_settings.stake;
+        req1.basis = bot_trade_settings.stake_unit;
+        req1.currency = bot_trade_settings.currency;
+        req1.duration = bot_trade_settings.duration;
+        req1.duration_unit = bot_trade_settings.duration_unit;
+        req1.barrier = bot_trade_settings.predection;
+
+        req2.contract_type = "EXPIRYMISS";
+        req2.amount = bot_trade_settings.stake;
+        req2.basis = bot_trade_settings.stake_unit;
+        req2.currency = bot_trade_settings.currency;
+        req2.duration = bot_trade_settings.duration;
+        req2.duration_unit = bot_trade_settings.duration_unit;
+        req2.barrier = bot_trade_settings.predection;
+        break;
+      case "Stay Bitween/Goes Outside":
+        req1.contract_type = "RANGE";
+        req1.amount = bot_trade_settings.stake;
+        req1.basis = bot_trade_settings.stake_unit;
+        req1.currency = bot_trade_settings.currency;
+        req1.duration = bot_trade_settings.duration;
+        req1.duration_unit = bot_trade_settings.duration_unit;
+        req1.barrier = bot_trade_settings.predection;
+
+        req2.contract_type = "UPORDOWN";
+        req2.amount = bot_trade_settings.stake;
+        req2.basis = bot_trade_settings.stake_unit;
+        req2.currency = bot_trade_settings.currency;
+        req2.duration = bot_trade_settings.duration;
+        req2.duration_unit = bot_trade_settings.duration_unit;
+        req2.barrier = bot_trade_settings.predection;
+        break;
+      case "High Tick/Low Tick":
+        req1.contract_type = "TICKHIGH";
+        req1.amount = bot_trade_settings.stake;
+        req1.basis = bot_trade_settings.stake_unit;
+        req1.currency = bot_trade_settings.currency;
+        req1.duration = bot_trade_settings.duration;
+        req1.duration_unit = bot_trade_settings.duration_unit;
+        req1.barrier = bot_trade_settings.predection;
+
+        req2.contract_type = "TICKLOW";
+        req2.amount = bot_trade_settings.stake;
+        req2.basis = bot_trade_settings.stake_unit;
+        req2.currency = bot_trade_settings.currency;
+        req2.duration = bot_trade_settings.duration;
+        req2.duration_unit = bot_trade_settings.duration_unit;
+        req2.barrier = bot_trade_settings.predection;
+        break;
+      case "Reset Call/Reset Put":
+        req1.contract_type = "RESETCALL";
+        req1.amount = bot_trade_settings.stake;
+        req1.basis = bot_trade_settings.stake_unit;
+        req1.currency = bot_trade_settings.currency;
+        req1.duration = bot_trade_settings.duration;
+        req1.duration_unit = bot_trade_settings.duration_unit;
+        req1.barrier = bot_trade_settings.predection;
+
+        req2.contract_type = "RESETPUT";
+        req2.amount = bot_trade_settings.stake;
+        req2.basis = bot_trade_settings.stake_unit;
+        req2.currency = bot_trade_settings.currency;
+        req2.duration = bot_trade_settings.duration;
+        req2.duration_unit = bot_trade_settings.duration_unit;
+        req2.barrier = bot_trade_settings.predection;
+        break;
+      case "Only Up/Only Down":
+        req1.contract_type = "RUNHIGH";
+        req1.amount = bot_trade_settings.stake;
+        req1.basis = bot_trade_settings.stake_unit;
+        req1.currency = bot_trade_settings.currency;
+        req1.duration = bot_trade_settings.duration;
+        req1.duration_unit = bot_trade_settings.duration_unit;
+        req1.barrier = bot_trade_settings.predection;
+
+        req2.contract_type = "RUNLOW";
+        req2.amount = bot_trade_settings.stake;
+        req2.basis = bot_trade_settings.stake_unit;
+        req2.currency = bot_trade_settings.currency;
+        req2.duration = bot_trade_settings.duration;
+        req2.duration_unit = bot_trade_settings.duration_unit;
+        req2.barrier = bot_trade_settings.predection;
+        break;
+      case "One Touch/No Touch":
+        req1.contract_type = "ONETOUCH";
+        req1.amount = bot_trade_settings.stake;
+        req1.basis = bot_trade_settings.stake_unit;
+        req1.currency = bot_trade_settings.currency;
+        req1.duration = bot_trade_settings.duration;
+        req1.duration_unit = bot_trade_settings.duration_unit;
+        req1.barrier = bot_trade_settings.predection;
+
+        req2.contract_type = "NOTOUCH";
+        req2.amount = bot_trade_settings.stake;
+        req2.basis = bot_trade_settings.stake_unit;
+        req2.currency = bot_trade_settings.currency;
+        req2.duration = bot_trade_settings.duration;
+        req2.duration_unit = bot_trade_settings.duration_unit;
+        req2.barrier = bot_trade_settings.predection;
+        break;
+      case "Turbo Long/Turbo Short":
+        req1.contract_type = "TURBOSLONG";
+        req1.amount = bot_trade_settings.stake;
+        req1.basis = bot_trade_settings.stake_unit;
+        req1.currency = bot_trade_settings.currency;
+        req1.duration = bot_trade_settings.duration;
+        req1.duration_unit = bot_trade_settings.duration_unit;
+        req1.barrier = bot_trade_settings.predection;
+
+        req2.contract_type = "TURBOSSHORT";
+        req2.amount = bot_trade_settings.stake;
+        req2.basis = bot_trade_settings.stake_unit;
+        req2.currency = bot_trade_settings.currency;
+        req2.duration = bot_trade_settings.duration;
+        req2.duration_unit = bot_trade_settings.duration_unit;
+        req2.barrier = bot_trade_settings.predection;
+        break;
+      case "Vanilla Long Call/Vanilla Long Put":
+        req1.contract_type = "VANILLALONGCALL";
+        req1.amount = bot_trade_settings.stake;
+        req1.basis = bot_trade_settings.stake_unit;
+        req1.currency = bot_trade_settings.currency;
+        req1.duration = bot_trade_settings.duration;
+        req1.duration_unit = bot_trade_settings.duration_unit;
+        req1.barrier = bot_trade_settings.predection;
+
+        req2.contract_type = "VANILLALONGPUT";
+        req2.amount = bot_trade_settings.stake;
+        req2.basis = bot_trade_settings.stake_unit;
+        req2.currency = bot_trade_settings.currency;
+        req2.duration = bot_trade_settings.duration;
+        req2.duration_unit = bot_trade_settings.duration_unit;
+        req2.barrier = bot_trade_settings.predection;
+        break;
+      default:
+        break;
+    }
+
+    //console.log(req1)
+    //console.log(req2)
     // Store resolve/reject functions
     pendingProposalResolves[req_id] = { resolve, reject };
 
     // Send request
-    console.log('[WS] Sending proposal request:', request);
-    socket.send(JSON.stringify(request));
+    //console.log('[WS] Sending proposal request1:', req1);
+    socket.send(JSON.stringify(req1));
+    //console.log('[WS] Sending proposal request2:', req2);
+    socket.send(JSON.stringify(req2));
 
     // Set timeout for safety
     setTimeout(() => {
