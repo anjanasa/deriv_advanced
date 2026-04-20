@@ -304,6 +304,7 @@ Blockly.Blocks['trade_settings'] = {
     switch (category) {
 
       case "Accumulator Up":
+      case "Accumulators":
         addGrowth(this);
         addStake(this);
         break;
@@ -1650,6 +1651,7 @@ function secondCatupdateTrigger(block, newValue) {
 
   switch (newValue) {
     case "Accumulator Up":
+    case "Accumulators":
       options = [["Accumulator", "ACCU"]]
       break;
     case "Asian Up/Asian Down":
@@ -1928,6 +1930,7 @@ async function getProposalData(params) {
     };
 
     switch (GLOBAL_CATEGORY) {
+      case "Accumulator Up":
       case "Accumulators":
         req1.contract_type = "ACCU";
         req1.amount = bot_trade_settings.stake;
@@ -1935,16 +1938,17 @@ async function getProposalData(params) {
         req1.currency = bot_trade_settings.currency || "USD";
         req1.duration = bot_trade_settings.duration;
         req1.duration_unit = bot_trade_settings.duration_unit;
+        req1.growth_rate = bot_trade_settings.growth || 0.03;
         break;
       case "Rise/Fall":
-        req1.contract_type = "CALL";
+        req1.contract_type = "PUT";
         req1.amount = bot_trade_settings.stake;
         req1.basis = bot_trade_settings.stake_unit;
         req1.currency = bot_trade_settings.currency || "USD";
         req1.duration = bot_trade_settings.duration;
         req1.duration_unit = bot_trade_settings.duration_unit;
 
-        req2.contract_type = "PUT";
+        req2.contract_type = "CALL";
         req2.amount = bot_trade_settings.stake;
         req2.basis = bot_trade_settings.stake_unit;
         req2.currency = bot_trade_settings.currency || "USD";
@@ -1952,13 +1956,30 @@ async function getProposalData(params) {
         req2.duration_unit = bot_trade_settings.duration_unit;
         break;
       case "Higher/Lower":
+        req1.contract_type = "CALL";
+        req1.amount = bot_trade_settings.stake;
+        req1.basis = bot_trade_settings.stake_unit;
+        req1.currency = bot_trade_settings.currency;
+        req1.duration = bot_trade_settings.duration;
+        req1.duration_unit = bot_trade_settings.duration_unit;
+        req1.barrier = (bot_trade_settings.barrier_direction || "+") + bot_trade_settings.single_barrier;
+
+        req2.contract_type = "PUT";
+        req2.amount = bot_trade_settings.stake;
+        req2.basis = bot_trade_settings.stake_unit;
+        req2.currency = bot_trade_settings.currency;
+        req2.duration = bot_trade_settings.duration;
+        req2.duration_unit = bot_trade_settings.duration_unit;
+        req2.barrier = (bot_trade_settings.barrier_direction || "-") + bot_trade_settings.single_barrier;
+        break;
+      case "Higher/Lower (Equals)":
         req1.contract_type = "CALLE";
         req1.amount = bot_trade_settings.stake;
         req1.basis = bot_trade_settings.stake_unit;
         req1.currency = bot_trade_settings.currency;
         req1.duration = bot_trade_settings.duration;
         req1.duration_unit = bot_trade_settings.duration_unit;
-        req1.barrier = bot_trade_settings.barrier;
+        req1.barrier = (bot_trade_settings.barrier_direction || "+") + bot_trade_settings.single_barrier;
 
         req2.contract_type = "PUTE";
         req2.amount = bot_trade_settings.stake;
@@ -1966,7 +1987,7 @@ async function getProposalData(params) {
         req2.currency = bot_trade_settings.currency;
         req2.duration = bot_trade_settings.duration;
         req2.duration_unit = bot_trade_settings.duration_unit;
-        req2.barrier = bot_trade_settings.barrier;
+        req2.barrier = (bot_trade_settings.barrier_direction || "-") + bot_trade_settings.single_barrier;
         break;
       case "Multiply Up/Multiply Down":
         req1.contract_type = "MULTUP";
@@ -2005,7 +2026,7 @@ async function getProposalData(params) {
         req1.currency = bot_trade_settings.currency;
         req1.duration = bot_trade_settings.duration;
         req1.duration_unit = bot_trade_settings.duration_unit;
-        req1.barrier = bot_trade_settings.predection;
+        req1.barrier = String(bot_trade_settings.digit || 0);
 
         req2.contract_type = "DIGITUNDER";
         req2.amount = bot_trade_settings.stake;
@@ -2013,7 +2034,7 @@ async function getProposalData(params) {
         req2.currency = bot_trade_settings.currency;
         req2.duration = bot_trade_settings.duration;
         req2.duration_unit = bot_trade_settings.duration_unit;
-        req2.barrier = bot_trade_settings.predection;
+        req2.barrier = String(bot_trade_settings.digit || 0);
         break;
       case "Digit Match/Digit Differs":
         req1.contract_type = "DIGITMATCH";
@@ -2022,6 +2043,7 @@ async function getProposalData(params) {
         req1.currency = bot_trade_settings.currency;
         req1.duration = bot_trade_settings.duration;
         req1.duration_unit = bot_trade_settings.duration_unit;
+        req1.barrier = String(bot_trade_settings.digit || 0);
 
         req2.contract_type = "DIGITDIFF";
         req2.amount = bot_trade_settings.stake;
@@ -2029,6 +2051,7 @@ async function getProposalData(params) {
         req2.currency = bot_trade_settings.currency;
         req2.duration = bot_trade_settings.duration;
         req2.duration_unit = bot_trade_settings.duration_unit;
+        req2.barrier = String(bot_trade_settings.digit || 0);
         break;
       case "Digit Odd/Digit Even":
         req1.contract_type = "DIGITODD";
@@ -2037,7 +2060,6 @@ async function getProposalData(params) {
         req1.currency = bot_trade_settings.currency;
         req1.duration = bot_trade_settings.duration;
         req1.duration_unit = bot_trade_settings.duration_unit;
-        req1.barrier = bot_trade_settings.predection;
 
         req2.contract_type = "DIGITEVEN";
         req2.amount = bot_trade_settings.stake;
@@ -2045,16 +2067,18 @@ async function getProposalData(params) {
         req2.currency = bot_trade_settings.currency;
         req2.duration = bot_trade_settings.duration;
         req2.duration_unit = bot_trade_settings.duration_unit;
-        req2.barrier = bot_trade_settings.predection;
         break;
       case "Ends Between/Ends Outside":
+        const barrier_high1 = bot_trade_settings.first_barrier;
+        const barrier_high2 = bot_trade_settings.second_barrier;
         req1.contract_type = "EXPIRYRANGE";
         req1.amount = bot_trade_settings.stake;
         req1.basis = bot_trade_settings.stake_unit;
         req1.currency = bot_trade_settings.currency;
         req1.duration = bot_trade_settings.duration;
         req1.duration_unit = bot_trade_settings.duration_unit;
-        req1.barrier = bot_trade_settings.predection;
+        req1.barrier = "+" + barrier_high1;
+        req1.barrier2 = "-" + Math.abs(barrier_high2);
 
         req2.contract_type = "EXPIRYMISS";
         req2.amount = bot_trade_settings.stake;
@@ -2062,16 +2086,20 @@ async function getProposalData(params) {
         req2.currency = bot_trade_settings.currency;
         req2.duration = bot_trade_settings.duration;
         req2.duration_unit = bot_trade_settings.duration_unit;
-        req2.barrier = bot_trade_settings.predection;
+        req2.barrier = "+" + barrier_high1;
+        req2.barrier2 = "-" + Math.abs(barrier_high2);
         break;
-      case "Stay Bitween/Goes Outside":
+      case "Stay Between/Goes Outside":
+        const barrier2_1 = bot_trade_settings.first_barrier;
+        const barrier2_2 = bot_trade_settings.second_barrier;
         req1.contract_type = "RANGE";
         req1.amount = bot_trade_settings.stake;
         req1.basis = bot_trade_settings.stake_unit;
         req1.currency = bot_trade_settings.currency;
         req1.duration = bot_trade_settings.duration;
         req1.duration_unit = bot_trade_settings.duration_unit;
-        req1.barrier = bot_trade_settings.predection;
+        req1.barrier = "+" + barrier2_1;
+        req1.barrier2 = "-" + Math.abs(barrier2_2);
 
         req2.contract_type = "UPORDOWN";
         req2.amount = bot_trade_settings.stake;
@@ -2079,7 +2107,8 @@ async function getProposalData(params) {
         req2.currency = bot_trade_settings.currency;
         req2.duration = bot_trade_settings.duration;
         req2.duration_unit = bot_trade_settings.duration_unit;
-        req2.barrier = bot_trade_settings.predection;
+        req2.barrier = "+" + barrier2_1;
+        req2.barrier2 = "-" + Math.abs(barrier2_2);
         break;
       case "High Tick/Low Tick":
         req1.contract_type = "TICKHIGH";
@@ -2088,7 +2117,6 @@ async function getProposalData(params) {
         req1.currency = bot_trade_settings.currency;
         req1.duration = bot_trade_settings.duration;
         req1.duration_unit = bot_trade_settings.duration_unit;
-        req1.barrier = bot_trade_settings.predection;
 
         req2.contract_type = "TICKLOW";
         req2.amount = bot_trade_settings.stake;
@@ -2096,7 +2124,6 @@ async function getProposalData(params) {
         req2.currency = bot_trade_settings.currency;
         req2.duration = bot_trade_settings.duration;
         req2.duration_unit = bot_trade_settings.duration_unit;
-        req2.barrier = bot_trade_settings.predection;
         break;
       case "Reset Call/Reset Put":
         req1.contract_type = "RESETCALL";
@@ -2105,7 +2132,6 @@ async function getProposalData(params) {
         req1.currency = bot_trade_settings.currency;
         req1.duration = bot_trade_settings.duration;
         req1.duration_unit = bot_trade_settings.duration_unit;
-        req1.barrier = bot_trade_settings.predection;
 
         req2.contract_type = "RESETPUT";
         req2.amount = bot_trade_settings.stake;
@@ -2113,7 +2139,6 @@ async function getProposalData(params) {
         req2.currency = bot_trade_settings.currency;
         req2.duration = bot_trade_settings.duration;
         req2.duration_unit = bot_trade_settings.duration_unit;
-        req2.barrier = bot_trade_settings.predection;
         break;
       case "Only Up/Only Down":
         req1.contract_type = "RUNHIGH";
@@ -2122,7 +2147,6 @@ async function getProposalData(params) {
         req1.currency = bot_trade_settings.currency;
         req1.duration = bot_trade_settings.duration;
         req1.duration_unit = bot_trade_settings.duration_unit;
-        req1.barrier = bot_trade_settings.predection;
 
         req2.contract_type = "RUNLOW";
         req2.amount = bot_trade_settings.stake;
@@ -2130,16 +2154,16 @@ async function getProposalData(params) {
         req2.currency = bot_trade_settings.currency;
         req2.duration = bot_trade_settings.duration;
         req2.duration_unit = bot_trade_settings.duration_unit;
-        req2.barrier = bot_trade_settings.predection;
         break;
       case "One Touch/No Touch":
+        const touch_barrier = (bot_trade_settings.barrier_direction || "+") + bot_trade_settings.single_barrier;
         req1.contract_type = "ONETOUCH";
         req1.amount = bot_trade_settings.stake;
         req1.basis = bot_trade_settings.stake_unit;
         req1.currency = bot_trade_settings.currency;
         req1.duration = bot_trade_settings.duration;
         req1.duration_unit = bot_trade_settings.duration_unit;
-        req1.barrier = bot_trade_settings.predection;
+        req1.barrier = touch_barrier;
 
         req2.contract_type = "NOTOUCH";
         req2.amount = bot_trade_settings.stake;
@@ -2147,16 +2171,17 @@ async function getProposalData(params) {
         req2.currency = bot_trade_settings.currency;
         req2.duration = bot_trade_settings.duration;
         req2.duration_unit = bot_trade_settings.duration_unit;
-        req2.barrier = bot_trade_settings.predection;
+        req2.barrier = touch_barrier;
         break;
       case "Turbo Long/Turbo Short":
+        const turbo_barrier = (bot_trade_settings.barrier_direction || "+") + bot_trade_settings.single_barrier;
         req1.contract_type = "TURBOSLONG";
         req1.amount = bot_trade_settings.stake;
         req1.basis = bot_trade_settings.stake_unit;
         req1.currency = bot_trade_settings.currency;
         req1.duration = bot_trade_settings.duration;
         req1.duration_unit = bot_trade_settings.duration_unit;
-        req1.barrier = bot_trade_settings.predection;
+        req1.barrier = turbo_barrier;
 
         req2.contract_type = "TURBOSSHORT";
         req2.amount = bot_trade_settings.stake;
@@ -2164,16 +2189,17 @@ async function getProposalData(params) {
         req2.currency = bot_trade_settings.currency;
         req2.duration = bot_trade_settings.duration;
         req2.duration_unit = bot_trade_settings.duration_unit;
-        req2.barrier = bot_trade_settings.predection;
+        req2.barrier = turbo_barrier;
         break;
       case "Vanilla Long Call/Vanilla Long Put":
+        const vanilla_barrier = bot_trade_settings.vanila_barriers || "+0.00";
         req1.contract_type = "VANILLALONGCALL";
         req1.amount = bot_trade_settings.stake;
         req1.basis = bot_trade_settings.stake_unit;
         req1.currency = bot_trade_settings.currency;
         req1.duration = bot_trade_settings.duration;
         req1.duration_unit = bot_trade_settings.duration_unit;
-        req1.barrier = bot_trade_settings.predection;
+        req1.barrier = vanilla_barrier;
 
         req2.contract_type = "VANILLALONGPUT";
         req2.amount = bot_trade_settings.stake;
@@ -2181,7 +2207,7 @@ async function getProposalData(params) {
         req2.currency = bot_trade_settings.currency;
         req2.duration = bot_trade_settings.duration;
         req2.duration_unit = bot_trade_settings.duration_unit;
-        req2.barrier = bot_trade_settings.predection;
+        req2.barrier = vanilla_barrier;
         break;
       default:
         break;
@@ -2332,7 +2358,8 @@ javascript.javascriptGenerator.forBlock['trade_settings'] = function (block, gen
     '\n    bot_trade_settings.stake = ' + value_stake + ';';
 
   switch (category) {
-    case "Accumulator Up": {
+    case "Accumulator Up":
+    case "Accumulators": {
       const growth_unit = block.getFieldValue('growth_unit');
       return (
         '\n    bot_trade_settings.growth = "' + growth_unit + '";' +
@@ -2340,7 +2367,7 @@ javascript.javascriptGenerator.forBlock['trade_settings'] = function (block, gen
       );
     }
     case "Digit Match/Digit Differs":
-    case "High Tick/Low Tick": {
+    case "Digit Over/Digit Under": {
       const dropdown_duration_unit = block.getFieldValue('duration_unit');
       const value_duration = generator.valueToCode(block, 'duration', javascript.Order.ATOMIC);
       const value_digit = generator.valueToCode(block, 'digit', javascript.Order.ATOMIC);
@@ -2348,6 +2375,15 @@ javascript.javascriptGenerator.forBlock['trade_settings'] = function (block, gen
         '\n    bot_trade_settings.duration_unit = "' + dropdown_duration_unit + '";' +
         '\n    bot_trade_settings.duration = ' + value_duration + ';' +
         '\n    bot_trade_settings.digit = ' + value_digit + ';' +
+        stakeLines
+      );
+    }
+    case "High Tick/Low Tick": {
+      const dropdown_duration_unit = block.getFieldValue('duration_unit');
+      const value_duration = generator.valueToCode(block, 'duration', javascript.Order.ATOMIC);
+      return (
+        '\n    bot_trade_settings.duration_unit = "' + dropdown_duration_unit + '";' +
+        '\n    bot_trade_settings.duration = ' + value_duration + ';' +
         stakeLines
       );
     }
