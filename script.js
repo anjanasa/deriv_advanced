@@ -80,6 +80,10 @@ let pendingMarketSubscriptionResolve = null;
 let pendingProposalResolves = {}; // Map of req_id to resolve functions
 let isImporting = false; // Flag to prevent getContractForSymbol during import
 let isAccountChanging = false; // Flag to prevent getContractForSymbol during account change
+let isMarketDataReady = false; // Flag to track if market data is loaded
+let pendingImportCallback = null; // Callback to run after markets are ready
+let isContractDataReady = false; // Flag to track if contract data is loaded
+let pendingContractCallback = null; // Callback to run after contracts are ready
 
 /* ─── Blockly Dynamic Dropdown Data ─────────────────────────────────────── */
 const PLACEHOLDER_OPTIONS = [['Loading…', 'LOADING']];
@@ -494,13 +498,16 @@ function onWorkspaceChange(event) {
 
         break;
       case "main_block":
-        console.log("[Block] Main block created");
+        console.log("[Block] Main block created", isImporting);
 
-        // Optional: initialize dropdowns immediately
-        const firstValue = block.getFieldValue('first_market');
-        if (firstValue && globalMarketData[firstValue]) {
-          updateSecondDropdown(block, firstValue);
+        if (!isImporting) {
+          // Optional: initialize dropdowns immediately
+          const firstValue = block.getFieldValue('first_market');
+          if (firstValue && globalMarketData[firstValue]) {
+            updateSecondDropdown(block, firstValue);
+          }
         }
+
         break;
     }
     return; // stop here for create events
@@ -1043,6 +1050,13 @@ function processActiveSymbols(data) {
   showInfo('Active markets loaded.');
   console.log('[Market] Global market data ready');
 
+  isMarketDataReady = true;
+  if (pendingImportCallback) {
+    console.log('[Market] Running pending import callback');
+    pendingImportCallback();
+    pendingImportCallback = null;
+  }
+
   // Initialise Blockly after market data is available
   if (!isBlockinitials) {
     initBlockly();
@@ -1103,11 +1117,14 @@ function extractAndCategorizeOpenMarkets(activeSymbolsArray) {
 /* ─── Contract Data ──────────────────────────────────────────────────────── */
 
 function getContractForSymbol(symbol) {
-  // Skip if currently importing bot or changing account to prevent data reset
-  if (isImporting || isAccountChanging) {
-    console.log('[Contract] Skipping getContractForSymbol during import/account change');
+  // Skip if currently changing account to prevent data reset (but allow during import)
+  if (isAccountChanging) {
+    console.log('[Contract] Skipping getContractForSymbol during account change');
     return;
   }
+
+  // Allow getContractForSymbol during import to load contracts for imported symbol
+  // The isImporting flag only prevents cascading dropdown updates, not contract loading
 
   if (!symbol || symbol === 'LOADING' || symbol === 'NONE') return;
   console.log('[Contract] Requesting contracts for:', symbol);
@@ -1197,8 +1214,16 @@ function processContractsFor(data) {
       if (firstIsPlaceholder) {
         firstField.setValue(result[0]?.[1] ?? '');
       } else {
-        // Re-apply the existing value so it stays selected
-        firstField.setValue(currentFirstValue);
+        // Check if the current value exists in the new result data
+        const isValidInResult = result.some(([, v]) => v === currentFirstValue);
+        if (isValidInResult) {
+          // Re-apply the existing value so it stays selected
+          firstField.setValue(currentFirstValue);
+        } else {
+          // Current value doesn't exist in new data - reset to first option
+          console.log('[Contract] Imported first_category not in new data, resetting to first option');
+          firstField.setValue(result[0]?.[1] ?? '');
+        }
       }
     }
 
@@ -1211,14 +1236,29 @@ function processContractsFor(data) {
       if (secondIsPlaceholder) {
         secondField.setValue(sub[0]?.[1] ?? '');
       } else {
-        // Keep the saved value — re-apply it so it stays selected
-        secondField.setValue(currentSecondValue);
+        // Check if the current value exists in the new sub data
+        const isValidInSub = sub.some(([, v]) => v === currentSecondValue);
+        if (isValidInSub) {
+          // Keep the saved value — re-apply it so it stays selected
+          secondField.setValue(currentSecondValue);
+        } else {
+          // Current value doesn't exist in new sub data - reset to first option
+          console.log('[Contract] Imported second_category not in new subdata, resetting to first option');
+          secondField.setValue(sub[0]?.[1] ?? '');
+        }
       }
     }
   });
 
 
   console.log('[Contract] Contract types loaded successfully');
+
+  isContractDataReady = true;
+  if (pendingContractCallback) {
+    console.log('[Contract] Running pending contract callback');
+    pendingContractCallback();
+    pendingContractCallback = null;
+  }
 }
 
 /** Map a contract item to its display group name. */
@@ -1518,6 +1558,7 @@ function exportBot() {
  * clears the current workspace, and loads the XML blocks.
  */
 function importBot() {
+  isImporting = true;
   if (!workspace) {
     showError('Workspace is not ready yet.');
     return;
@@ -1535,55 +1576,162 @@ function importBot() {
     const reader = new FileReader();
     reader.onload = (event) => {
       try {
-        // Set importing flag to prevent getContractForSymbol calls
-        isImporting = true;
-
         const xmlText = event.target.result;
         const xml = Blockly.utils.xml.textToDom(xmlText);
 
-        // Clear existing workspace before loading
-        workspace.clear();
+        // Extract bot details from XML BEFORE loading blocks
+        let importedFirstMarket = null;
+        let importedSecondMarket = null;
+        let importedThirdMarket = null;
+        let importedFirstCategory = null;
+        let importedSecondCategory = null;
+        let importedContractType = null;
+        let importedCandleInterval = null;
+        let importedBuySellError = null;
+        let importedLastTradeOnError = null;
 
-        // Load the XML into the workspace
-        Blockly.Xml.domToWorkspace(xml, workspace);
+        // Find main_block in XML and extract field values
+        const mainBlockElement = xml.querySelector('block[type="main_block"]');
+        if (mainBlockElement) {
+          const getFieldValue = (fieldName) => {
+            const field = mainBlockElement.querySelector(`field[name="${fieldName}"]`);
+            return field ? field.textContent : null;
+          };
+          importedFirstMarket = getFieldValue('first_market');
+          importedSecondMarket = getFieldValue('second_market');
+          importedThirdMarket = getFieldValue('third_market');
+          importedFirstCategory = getFieldValue('first_category');
+          importedSecondCategory = getFieldValue('second_category');
+          importedContractType = getFieldValue('contract_type');
+          importedCandleInterval = getFieldValue('candle_interval');
+          importedBuySellError = getFieldValue('buySellError');
+          importedLastTradeOnError = getFieldValue('lastTradeOnError');
+        }
 
-        // Update bot name from filename (strip .xml extension)
+        // Get bot name from filename
         const nameWithoutExt = file.name.replace(/\.xml$/i, '').replace(/_/g, ' ');
         const botNameInput = document.getElementById('botName');
         if (botNameInput) botNameInput.value = nameWithoutExt;
 
-        // Capture the values restored by domToWorkspace BEFORE any cascade can touch them
-        let importedThirdMarket = null;
-        let importedSecondCategory = null;
-        const mainBlocks = workspace.getBlocksByType('main_block', false);
-        if (mainBlocks.length > 0) {
-          importedThirdMarket = mainBlocks[0].getFieldValue('third_market');
-          importedSecondCategory = mainBlocks[0].getFieldValue('second_category');
+        console.log(`[Bot] Parsed bot details from "${file.name}"`);
+        console.log('[Bot] first_market:', importedFirstMarket);
+        console.log('[Bot] second_market:', importedSecondMarket);
+        console.log('[Bot] third_market:', importedThirdMarket);
+        console.log('[Bot] first_category:', importedFirstCategory);
+        console.log('[Bot] second_category:', importedSecondCategory);
+
+        // Store the XML for later loading
+        const savedXml = xml;
+
+        // Function to load blocks after both market AND contract data are ready
+        function loadImportedBlocksWithData() {
+          // Pre-populate dropdown data so XML values can be restored
+          if (importedFirstMarket && globalMarketData[importedFirstMarket]) {
+            const marketEntry = globalMarketData[importedFirstMarket];
+            secondMarketData = Object.entries(marketEntry.submarkets)
+              .map(([key, value]) => [value.name, key]);
+
+            if (importedSecondMarket && marketEntry.submarkets[importedSecondMarket]) {
+              const submarket = marketEntry.submarkets[importedSecondMarket];
+              thirdMarketData = submarket.symbols.map(s => [capitalize(s.display_name), s.symbol]);
+            }
+          }
+
+          // Load blocks exactly as they are - no value setting, no cascades
+          workspace.clear();
+          Blockly.Xml.domToWorkspace(savedXml, workspace);
+
+          // Update bot name
+          const botNameInput = document.getElementById('botName');
+          if (botNameInput) botNameInput.value = nameWithoutExt;
+
+          // Manually restore category values from imported data
+          const mainBlocks = workspace.getBlocksByType('main_block', false);
+          if (mainBlocks.length > 0) {
+            const block = mainBlocks[0];
+            const firstCatField = block.getField('first_category');
+            const secondCatField = block.getField('second_category');
+
+            // Set importing flag to prevent dropdown resets
+            isImporting = true;
+
+            // Step 1: Set first_category
+            if (firstCatField && importedFirstCategory) {
+              const isValidFirst = mainContractTypes.some(([, v]) => v === importedFirstCategory);
+              if (isValidFirst) {
+                firstCatField.setValue(importedFirstCategory);
+              } else {
+                // Find the category that contains our second_category
+                let foundCategory = null;
+                for (const [cat, subOptions] of Object.entries(subdata)) {
+                  if (subOptions.some(([, v]) => v === importedSecondCategory)) {
+                    foundCategory = cat;
+                    break;
+                  }
+                }
+                if (foundCategory) {
+                  firstCatField.setValue(foundCategory);
+                }
+              }
+            }
+
+            // Step 2: Wait for first_category to update, then set second_category
+            setTimeout(() => {
+              // Update the second category dropdown
+              const currentFirstCat = block.getFieldValue('first_category');
+              updateSecondCategoryDropdown(block, currentFirstCat);
+
+              // Step 3: Set the second_category value
+              setTimeout(() => {
+                if (secondCatField && importedSecondCategory) {
+                  secondCatField.setValue(importedSecondCategory);
+                  secondCatupdateTrigger(block, importedSecondCategory);
+                }
+                isImporting = false;
+              }, 100);
+            }, 100);
+          }
+
+          console.log('[Bot] Blocks loaded successfully with all data ready');
         }
 
-        console.log(`[Bot] Imported workspace from "${file.name}"`);
-        console.log('[Bot] Imported third_market:', importedThirdMarket);
-        console.log('[Bot] Imported second_category:', importedSecondCategory);
+        // Fetch contract data for the imported symbol first, then load blocks
+        function fetchContractsAndLoadBlocks() {
+          // Reset contract data to ensure we get fresh data for the imported symbol
+          isContractDataReady = false;
 
-        // After workspace settles: re-enable flag then reload contracts
-        // for the correct imported symbol and category.
-        setTimeout(() => {
-          isImporting = false;
-          console.log('[Bot] Import complete — reloading contracts for imported symbol');
-
-          if (importedThirdMarket &&
-            importedThirdMarket !== 'LOADING' &&
-            importedThirdMarket !== 'OPTIONNAME') {
+          // Request contracts for the imported symbol
+          if (importedThirdMarket) {
+            console.log('[Bot] Fetching contracts for:', importedThirdMarket);
             getContractForSymbol(importedThirdMarket);
           }
 
-          if (importedSecondCategory &&
-            importedSecondCategory !== 'LOADING' &&
-            importedSecondCategory !== 'OPTIONNAME' &&
-            mainBlocks.length > 0) {
-            secondCatupdateTrigger(mainBlocks[0], importedSecondCategory);
+          // Poll until NEW contract data is ready
+          const checkAndLoad = () => {
+            if (isContractDataReady) {
+              console.log('[Bot] Contract data ready - loading blocks');
+              loadImportedBlocksWithData();
+            } else {
+              setTimeout(checkAndLoad, 100);
+            }
+          };
+          setTimeout(checkAndLoad, 100);
+        }
+
+        // Ensure market data is ready, then fetch contracts and load blocks
+        function ensureMarketDataReady() {
+          if (isMarketDataReady) {
+            console.log('[Bot] Market data ready — fetching contracts and loading blocks');
+            fetchContractsAndLoadBlocks();
+          } else {
+            console.log('[Bot] Fetching market data first...');
+            pendingImportCallback = fetchContractsAndLoadBlocks;
+            getActiveMarkets();
           }
-        }, 500);
+        }
+
+        // Start the process - ensure market data first
+        ensureMarketDataReady();
 
       } catch (err) {
         console.error('[Bot] Failed to import workspace:', err);
