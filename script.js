@@ -1765,6 +1765,10 @@ async function runBot() {
   console.log('[Bot] Starting bot...');
   try {
     let code = javascript.javascriptGenerator.workspaceToCode(workspace);
+    if (!code || code.trim() === '' || code.trim() === ';') {
+      console.warn('[Bot] Generated code is empty or invalid');
+      throw new Error('No valid code generated from workspace');
+    }
     eval(code);
     bot_functions.assign_bot_variables_f();
     //console.log(bot_trade_settings);
@@ -1929,6 +1933,13 @@ async function getProposalData(params) {
       req_id: req_id
     };
 
+    // Apply defaults if not set by blocks
+    if (!bot_trade_settings.duration) bot_trade_settings.duration = 5;
+    if (!bot_trade_settings.duration_unit) bot_trade_settings.duration_unit = 't';
+    if (!bot_trade_settings.currency) bot_trade_settings.currency = 'USD';
+    if (!bot_trade_settings.stake) bot_trade_settings.stake = 1;
+    if (!bot_trade_settings.stake_unit) bot_trade_settings.stake_unit = 'stake';
+
     switch (GLOBAL_CATEGORY) {
       case "Accumulator Up":
       case "Accumulators":
@@ -1936,8 +1947,6 @@ async function getProposalData(params) {
         req1.amount = bot_trade_settings.stake;
         req1.basis = bot_trade_settings.stake_unit;
         req1.currency = bot_trade_settings.currency || "USD";
-        req1.duration = bot_trade_settings.duration;
-        req1.duration_unit = bot_trade_settings.duration_unit;
         req1.growth_rate = bot_trade_settings.growth || 0.03;
         break;
       case "Rise/Fall":
@@ -2210,6 +2219,13 @@ async function getProposalData(params) {
         req2.barrier = vanilla_barrier;
         break;
       default:
+        req1.contract_type = "CALL";
+        req1.amount = bot_trade_settings.stake;
+        req1.basis = bot_trade_settings.stake_unit;
+        req1.currency = bot_trade_settings.currency;
+        req1.duration = bot_trade_settings.duration;
+        req1.duration_unit = bot_trade_settings.duration_unit;
+        console.warn('[Bot] GLOBAL_CATEGORY not recognized, using CALL as default');
         break;
     }
 
@@ -2221,8 +2237,10 @@ async function getProposalData(params) {
     // Send request
     //console.log('[WS] Sending proposal request1:', req1);
     socket.send(JSON.stringify(req1));
-    //console.log('[WS] Sending proposal request2:', req2);
-    socket.send(JSON.stringify(req2));
+    if (req2.contract_type) {
+      //console.log('[WS] Sending proposal request2:', req2);
+      socket.send(JSON.stringify(req2));
+    }
 
     // Set timeout for safety
     setTimeout(() => {
