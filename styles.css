@@ -2340,3 +2340,20 @@
         height: 6%;
     }
 }
+
+.overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background-image: url('/assets/overlaycopy.jpg');
+    /* Your background image */
+    background-size: cover;
+    /* Ensures image covers the entire space */
+    background-position: center;
+    /* Centers the image */
+    z-index: 1000;
+    pointer-events: none;
+    opacity: 0.1;
+}
