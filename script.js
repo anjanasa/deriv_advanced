@@ -2109,7 +2109,7 @@ async function getProposalData(params) {
         req1.amount = bot_trade_settings.stake;
         req1.basis = bot_trade_settings.stake_unit;
         req1.currency = bot_trade_settings.currency || "USD";
-        req1.growth_rate = bot_trade_settings.growth || 0.03;
+        req1.growth_rate = bot_trade_settings.growth;
         req1.req_id = 119;
         break;
       case "Rise/Fall":
@@ -2215,7 +2215,7 @@ async function getProposalData(params) {
         req2.currency = bot_trade_settings.currency;
         req2.duration = bot_trade_settings.duration;
         req2.duration_unit = bot_trade_settings.duration_unit;
-        req2.barrier = String(bot_trade_settings.digit || 0);
+        req2.barrier = String(bot_trade_settings.digit);
         req2.req_id = 11;
         break;
       case "Digit Match/Digit Differs":
@@ -2457,23 +2457,312 @@ async function bot_place_trade(direction) {
   console.log('calling to purchase ', direction, GLOBAL_CATEGORY);
   let data;
 
-  if (GLOBAL_CATEGORY == "Rise/Fall") {
+  if (bot_trade_settings.isDirectTrade == true) {
+    // Default parameters common to all contracts
+    const baseParams = {
+      "amount": bot_trade_settings.stake,
+      "basis": bot_trade_settings.stake_unit,
+      "currency": bot_trade_settings.currency || "USD",
+      "duration": bot_trade_settings.duration,
+      "duration_unit": bot_trade_settings.duration_unit,
+      "symbol": bot_trade_settings.market
+    };
+
+    // Determine contract_type based on GLOBAL_CATEGORY and direction
+    let contract_type;
+    let extraParams = {};
+
+    switch (GLOBAL_CATEGORY) {
+      case "Accumulator Up":
+      case "Accumulators":
+        contract_type = "ACCU";
+        extraParams.growth_rate = bot_trade_settings.growth;
+        break;
+      case "Rise/Fall":
+        // Note: In getProposalData, req1 is "PUT" and req2 is "CALL" for Rise/Fall
+        contract_type = direction === "CALL" ? "CALL" : "PUT";
+        break;
+      case "Higher/Lower":
+        contract_type = direction === "CALL" ? "CALL" : "PUT";
+        extraParams.barrier = bot_trade_settings.barrier_direction + bot_trade_settings.single_barrier;
+        break;
+      case "Higher/Lower (Equals)":
+        contract_type = direction === "CALL" ? "CALLE" : "PUTE";
+        break;
+      case "Multiply Up/Multiply Down":
+        contract_type = direction === "CALL" ? "MULTUP" : "MULTDOWN";
+        break;
+      case "Asian Up/Asian Down":
+        contract_type = direction === "CALL" ? "ASIANU" : "ASIAND";
+        break;
+      case "Digit Over/Digit Under":
+        contract_type = direction === "CALL" ? "DIGITOVER" : "DIGITUNDER";
+        extraParams.barrier = bot_trade_settings.digit;
+        break;
+      case "Digit Match/Digit Differs":
+        contract_type = direction === "CALL" ? "DIGITMATCH" : "DIGITDIFF";
+        extraParams.barrier = bot_trade_settings.digit;
+        break;
+      case "Digit Odd/Digit Even":
+        contract_type = direction === "CALL" ? "DIGITODD" : "DIGITEVEN";
+        break;
+      case "Ends Between/Ends Outside":
+        contract_type = direction === "CALL" ? "EXPIRYRANGE" : "EXPIRYMISS";
+        extraParams.barrier = "+" + bot_trade_settings.first_barrier;
+        extraParams.barrier2 = "-" + bot_trade_settings.second_barrier;
+        break;
+      case "Stay Between/Goes Outside":
+        contract_type = direction === "CALL" ? "RANGE" : "UPORDOWN";
+        extraParams.barrier = "+" + bot_trade_settings.first_barrier;
+        extraParams.barrier2 = "-" + bot_trade_settings.second_barrier;
+        break;
+      case "High Tick/Low Tick":
+        contract_type = direction === "CALL" ? "TICKHIGH" : "TICKLOW";
+        break;
+      case "Reset Call/Reset Put":
+        contract_type = direction === "CALL" ? "RESETCALL" : "RESETPUT";
+        break;
+      case "Only Up/Only Down":
+        contract_type = direction === "CALL" ? "RUNHIGH" : "RUNLOW";
+        break;
+      case "One Touch/No Touch":
+        contract_type = direction === "CALL" ? "ONETOUCH" : "NOTOUCH";
+        extraParams.barrier = (bot_trade_settings.barrier_direction) + bot_trade_settings.single_barrier;
+        break;
+      case "Turbo Long/Turbo Short":
+        contract_type = direction === "CALL" ? "TURBOSLONG" : "TURBOSSHORT";
+        extraParams.barrier = (bot_trade_settings.barrier_direction) + bot_trade_settings.single_barrier;
+        break;
+      case "Vanilla Long Call/Vanilla Long Put":
+        contract_type = direction === "CALL" ? "VANILLALONGCALL" : "VANILLALONGPUT";
+        extraParams.barrier = bot_trade_settings.vanila_barriers;
+        break;
+      default:
+        // Fallback for unknown categories
+        contract_type = direction === "CALL" ? "CALL" : "PUT";
+        console.warn('[Bot] GLOBAL_CATEGORY not recognized in direct trade, using CALL/PUT as default');
+        break;
+    }
+
+    // Build the final parameters object
+    const parameters = { ...baseParams, ...extraParams, contract_type };
+
     data = {
       "buy": 1,
-      "price": bot_trade_settings.stake, // Max price you are willing to pay
+      "price": bot_trade_settings.stake,
       "subscribe": 1,
-      "parameters": {
-        "amount": bot_trade_settings.stake,
-        "basis": bot_trade_settings.stake_unit, // usually "stake"
-        "contract_type": direction, // "CALL" or "PUT"
-        "currency": "USD",
-        "duration": bot_trade_settings.duration,
-        "duration_unit": bot_trade_settings.duration_unit,
-        "symbol": bot_trade_settings.market
-      },
-      "req_id": 100 // Optional: helps track requests
+      "parameters": parameters,
+      "req_id": 100
     };
+  } else {
+    if (direction == "CALL") {
+      data = {
+        "buy": bot_trade_settings.over_prop_id,
+        "price": bot_trade_settings.stake,
+        "subscribe": 1,
+        "req_id": 100
+      }
+    } else if (direction == "PUT") {
+      data = {
+        "buy": bot_trade_settings.under_prop_id,
+        "price": bot_trade_settings.stake,
+        "subscribe": 1,
+        "req_id": 100
+      }
+    } else if (direction == "CALLE") {
+      data = {
+        "buy": bot_trade_settings.over_prop_id,
+        "price": bot_trade_settings.stake,
+        "subscribe": 1,
+        "req_id": 100
+      }
+    } else if (direction == "PUTE") {
+      data = {
+        "buy": bot_trade_settings.under_prop_id,
+        "price": bot_trade_settings.stake,
+        "subscribe": 1,
+        "req_id": 100
+      }
+    } else if (direction == "ASIANU") {
+      data = {
+        "buy": bot_trade_settings.under_prop_id,
+        "price": bot_trade_settings.stake,
+        "subscribe": 1,
+        "req_id": 100
+      }
+    } else if (direction == "ASIAND") {
+      data = {
+        "buy": bot_trade_settings.over_prop_id,
+        "price": bot_trade_settings.stake,
+        "subscribe": 1,
+        "req_id": 100
+      }
+    } else if (direction == "MULTUP") {
+      data = {
+        "buy": bot_trade_settings.under_prop_id,
+        "price": bot_trade_settings.stake,
+        "subscribe": 1,
+        "req_id": 100
+      }
+    } else if (direction == "MULTDOWN") {
+      data = {
+        "buy": bot_trade_settings.over_prop_id,
+        "price": bot_trade_settings.stake,
+        "subscribe": 1,
+        "req_id": 100
+      }
+    } else if (direction == "VANILLALONGCALL") {
+      data = {
+        "buy": bot_trade_settings.under_prop_id,
+        "price": bot_trade_settings.stake,
+        "subscribe": 1,
+        "req_id": 100
+      }
+    } else if (direction == "VANILLALONGPUT") {
+      data = {
+        "buy": bot_trade_settings.over_prop_id,
+        "price": bot_trade_settings.stake,
+        "subscribe": 1,
+        "req_id": 100
+      }
+    } else if (direction == "TURBOSLONG") {
+      data = {
+        "buy": bot_trade_settings.under_prop_id,
+        "price": bot_trade_settings.stake,
+        "subscribe": 1,
+        "req_id": 100
+      }
+    } else if (direction == "TURBOSSHORT") {
+      data = {
+        "buy": bot_trade_settings.over_prop_id,
+        "price": bot_trade_settings.stake,
+        "subscribe": 1,
+        "req_id": 100
+      }
+    } else if (direction == "ONETOUCH") {
+      data = {
+        "buy": bot_trade_settings.under_prop_id,
+        "price": bot_trade_settings.stake,
+        "subscribe": 1,
+        "req_id": 100
+      }
+    } else if (direction == "NOTOUCH") {
+      data = {
+        "buy": bot_trade_settings.over_prop_id,
+        "price": bot_trade_settings.stake,
+        "subscribe": 1,
+        "req_id": 100
+      }
+    } else if (direction == "DIGITMATCH") {
+      data = {
+        "buy": bot_trade_settings.under_prop_id,
+        "price": bot_trade_settings.stake,
+        "subscribe": 1,
+        "req_id": 100
+      }
+    } else if (direction == "DIGITDIFF") {
+      data = {
+        "buy": bot_trade_settings.over_prop_id,
+        "price": bot_trade_settings.stake,
+        "subscribe": 1,
+        "req_id": 100
+      }
+    } else if (direction == "DIGITODD") {
+      data = {
+        "buy": bot_trade_settings.under_prop_id,
+        "price": bot_trade_settings.stake,
+        "subscribe": 1,
+        "req_id": 100
+      }
+    } else if (direction == "DIGITEVEN") {
+      data = {
+        "buy": bot_trade_settings.over_prop_id,
+        "price": bot_trade_settings.stake,
+        "subscribe": 1,
+        "req_id": 100
+      }
+    } else if (direction == "DIGITOVER") {
+      data = {
+        "buy": bot_trade_settings.under_prop_id,
+        "price": bot_trade_settings.stake,
+        "subscribe": 1,
+        "req_id": 100
+      }
+    } else if (direction == "DIGITUNDER") {
+      data = {
+        "buy": bot_trade_settings.over_prop_id,
+        "price": bot_trade_settings.stake,
+        "subscribe": 1,
+        "req_id": 100
+      }
+    } else if (direction == "EXPIRYRANGE") {
+      data = {
+        "buy": bot_trade_settings.under_prop_id,
+        "price": bot_trade_settings.stake,
+        "subscribe": 1,
+        "req_id": 100
+      }
+    } else if (direction == "EXPIRYMISS") {
+      data = {
+        "buy": bot_trade_settings.over_prop_id,
+        "price": bot_trade_settings.stake,
+        "subscribe": 1,
+        "req_id": 100
+      }
+    } else if (direction == "RANGE") {
+      data = {
+        "buy": bot_trade_settings.under_prop_id,
+        "price": bot_trade_settings.stake,
+        "subscribe": 1,
+        "req_id": 100
+      }
+    } else if (direction == "UPORDOWN") {
+      data = {
+        "buy": bot_trade_settings.over_prop_id,
+        "price": bot_trade_settings.stake,
+        "subscribe": 1,
+        "req_id": 100
+      }
+    } else if (direction == "RESETCALL") {
+      data = {
+        "buy": bot_trade_settings.under_prop_id,
+        "price": bot_trade_settings.stake,
+        "subscribe": 1,
+        "req_id": 100
+      }
+    } else if (direction == "RESETPUT") {
+      data = {
+        "buy": bot_trade_settings.over_prop_id,
+        "price": bot_trade_settings.stake,
+        "subscribe": 1,
+        "req_id": 100
+      }
+    } else if (direction == "RUNHIGH") {
+      data = {
+        "buy": bot_trade_settings.under_prop_id,
+        "price": bot_trade_settings.stake,
+        "subscribe": 1,
+        "req_id": 100
+      }
+    } else if (direction == "RUNLOW") {
+      data = {
+        "buy": bot_trade_settings.over_prop_id,
+        "price": bot_trade_settings.stake,
+        "subscribe": 1,
+        "req_id": 100
+      }
+    } else if (direction == "ACCU") {
+      // ACCU uses a different proposal ID (req_id=119), not over/under
+      // For now, use over_prop_id as placeholder
+      data = {
+        "buy": bot_trade_settings.over_prop_id || bot_trade_settings.under_prop_id,
+        "price": bot_trade_settings.stake,
+        "subscribe": 1,
+        "req_id": 100
+      }
+    }
   }
+
 
   console.log(data);
   socket.send(JSON.stringify(data));
@@ -2504,14 +2793,13 @@ function processProposal(data) {
     return;
   }
 
-  /*switch ("") {
-    case value:
 
-      break;
-
-    default:
-      break;
-  }*/
+  if (data.req_id == 11) {
+    bot_trade_settings.over_prop_id = data.proposal.id;
+  }
+  if (data.req_id == 99) {
+    bot_trade_settings.under_prop_id = data.proposal.id;
+  }
 
   // Resolve pending promise with proposal data
   if (data.echo_req && data.echo_req.req_id && pendingProposalResolves[data.echo_req.req_id]) {
