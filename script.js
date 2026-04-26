@@ -1772,6 +1772,9 @@ function block_change_detect() {
     // Ignore non-change events if needed
     if (event.type !== Blockly.Events.BLOCK_CHANGE) return;
 
+    // Do not rebuild shapes during bot import, as this detaches already-saved inputs
+    if (typeof isImporting !== 'undefined' && isImporting) return;
+
     const block = workspace.getBlockById(event.blockId);
     if (!block) return;
 
@@ -1785,16 +1788,32 @@ function block_change_detect() {
 
         let blocks = workspace.getBlocksByType('trade_settings', false);
 
-        blocks.forEach(block => {
+        blocks.forEach(tBlock => {
 
           // 🔷 set category
-          block.category = event.newValue;
+          tBlock.category = event.newValue;
 
           // 🔷 rebuild structure
-          block.updateShape_();
+          tBlock.updateShape_();
 
           // 🔷 force UI refresh
-          block.render();
+          tBlock.render();
+          
+          // 🔷 attach math_number to empty value inputs after update
+          if (tBlock.inputList) {
+            tBlock.inputList.forEach(input => {
+              // Blockly.INPUT_VALUE is 1
+              if (input.type === Blockly.INPUT_VALUE && (!input.connection || !input.connection.targetConnection)) {
+                const numberBlock = workspace.newBlock('math_number');
+                numberBlock.setFieldValue('1', 'NUM');
+                numberBlock.initSvg();
+                numberBlock.render();
+                if (input.connection) {
+                  numberBlock.outputConnection.connect(input.connection);
+                }
+              }
+            });
+          }
         });
       }
     }
@@ -2434,21 +2453,37 @@ async function getProposalData(params) {
     //console.log(req1)
     //console.log(req2)
     // Store resolve/reject functions
-    pendingProposalResolves[req_id] = { resolve, reject };
+    let expected = req2.contract_type ? 2 : 1;
+    let count = 0;
+    const handleResolve = (data) => {
+      count++;
+      if (count >= expected) resolve(data);
+    };
+
+    pendingProposalResolves[req1.req_id] = { resolve: handleResolve, reject };
+    if (req2.contract_type) {
+      pendingProposalResolves[req2.req_id] = { resolve: handleResolve, reject };
+    }
 
     // Send request
-    //console.log('[WS] Sending proposal request1:', req1);
     socket.send(JSON.stringify(req1));
     if (req2.contract_type) {
-      //console.log('[WS] Sending proposal request2:', req2);
       socket.send(JSON.stringify(req2));
     }
 
     // Set timeout for safety
     setTimeout(() => {
-      if (pendingProposalResolves[req_id]) {
-        pendingProposalResolves[req_id].reject(new Error('Proposal request timeout'));
-        delete pendingProposalResolves[req_id];
+      let timedOut = false;
+      if (pendingProposalResolves[req1.req_id]) {
+        delete pendingProposalResolves[req1.req_id];
+        timedOut = true;
+      }
+      if (req2.contract_type && pendingProposalResolves[req2.req_id]) {
+        delete pendingProposalResolves[req2.req_id];
+        timedOut = true;
+      }
+      if (timedOut) {
+        reject(new Error('Proposal request timeout'));
       }
     }, 10000); // 10 second timeout
   });
@@ -2782,32 +2817,53 @@ function processBuy(data) {
 function processProposal(data) {
   console.log('[WS] Proposal response:', data);
 
-  // Check for error
+  const reqId = data.req_id || data.echo_req?.req_id;
+
   if (data.error) {
     console.error('[WS] Proposal error:', data.error.message);
-    // Resolve any pending promises with error
-    if (data.echo_req && data.echo_req.req_id && pendingProposalResolves[data.echo_req.req_id]) {
-      pendingProposalResolves[data.echo_req.req_id].reject(new Error(data.error.message));
-      delete pendingProposalResolves[data.echo_req.req_id];
+
+    if (reqId && pendingProposalResolves[reqId]) {
+      pendingProposalResolves[reqId].reject(new Error(data.error.message));
+      delete pendingProposalResolves[reqId];
     }
+
     return;
   }
 
+  if (!data.proposal || !data.proposal.id) {
+    console.error('[WS] Invalid proposal response:', data);
 
-  if (data.req_id == 11) {
+    if (reqId && pendingProposalResolves[reqId]) {
+      pendingProposalResolves[reqId].reject(
+        new Error('Invalid proposal response: proposal id missing')
+      );
+      delete pendingProposalResolves[reqId];
+    }
+
+    return;
+  }
+
+  if (reqId == 11) {
     bot_trade_settings.over_prop_id = data.proposal.id;
-  }
-  if (data.req_id == 99) {
-    bot_trade_settings.under_prop_id = data.proposal.id;
+    console.log('[WS] OVER proposal saved:', data.proposal.id);
   }
 
-  // Resolve pending promise with proposal data
-  if (data.echo_req && data.echo_req.req_id && pendingProposalResolves[data.echo_req.req_id]) {
-    pendingProposalResolves[data.echo_req.req_id].resolve(data.proposal);
-    delete pendingProposalResolves[data.echo_req.req_id];
+  if (reqId == 99) {
+    bot_trade_settings.under_prop_id = data.proposal.id;
+    console.log('[WS] UNDER proposal saved:', data.proposal.id);
+  }
+
+  if (reqId == 119) {
+    bot_trade_settings.single_prop_id = data.proposal.id;
+    bot_trade_settings.over_prop_id = data.proposal.id;
+    console.log('[WS] SINGLE proposal saved:', data.proposal.id);
+  }
+
+  if (reqId && pendingProposalResolves[reqId]) {
+    pendingProposalResolves[reqId].resolve(data.proposal);
+    delete pendingProposalResolves[reqId];
   }
 }
-
 function processOpenContract(data) {
   const contract = data.proposal_open_contract;
 
