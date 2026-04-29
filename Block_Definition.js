@@ -69,7 +69,7 @@ Blockly.defineBlocksWithJsonArray([
   "tooltip": "",
   "helpUrl": ""
 },
-/*{
+{
   "type": "payout",
   "message0": "Payout %1",
   "args0": [
@@ -143,7 +143,7 @@ Blockly.defineBlocksWithJsonArray([
   "colour": "#04db81",
   "tooltip": "",
   "helpUrl": ""
-},*/
+},
 {
   "type": "go__to_the_trade_option",
   "message0": "Go To The Trade Options",

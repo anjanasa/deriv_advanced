@@ -15,7 +15,7 @@ let purchaseOptions = [
   ["Option", "OPTION"]
 ];
 let isBlockinitials = false;
-let GLOBAL_CATEGORY
+let GLOBAL_CATEGORY = ''
 let rawticklist
 let trade_again = true
 
@@ -38,7 +38,10 @@ let bot_trade_settings = {
   is_bot_on_trade: false,
   bot_purchase_direction: '',
   proposal_data_called: false,
-  currency: 'USD'
+  currency: 'USD',
+  can_sell: false,
+  current_contract_id: null,
+  current_profit: 0
 };
 
 // Set to true when the user explicitly clicks Stop Bot.
@@ -177,7 +180,8 @@ Blockly.Blocks['trade_settings'] = {
       //this.category = category;
 
       // ✅ store globally
-      //GLOBAL_CATEGORY = category;
+      GLOBAL_CATEGORY = category;
+      console.log('Category updated to:', category);
 
       // ✅ Update ALL existing blocks (once)
       const blocks = this.workspace.getBlocksByType('trade_settings', false);
@@ -395,7 +399,7 @@ Blockly.Blocks['payout'] = {
       .appendField("Payout")
       .appendField(
         new Blockly.FieldDropdown(() => purchaseOptions),
-        "purchase_direction"
+        "payout_direction"
       );
     this.setInputsInline(false);
     this.setOutput(true, null);
@@ -404,7 +408,7 @@ Blockly.Blocks['payout'] = {
     this.setHelpUrl("");
   },
   updateShape_: function () {
-    const field = this.getField('purchase_direction');
+    const field = this.getField('payout_direction');
     if (field) {
       field.menuGenerator_ = purchaseOptions;
       field.setValue(purchaseOptions[0][1]); // reset safely
@@ -417,7 +421,7 @@ Blockly.Blocks['askprice'] = {
       .appendField("Ask Price")
       .appendField(
         new Blockly.FieldDropdown(() => purchaseOptions),
-        "purchase_direction"
+        "payout_direction"
       );
     this.setInputsInline(false);
     this.setOutput(true, null);
@@ -426,7 +430,7 @@ Blockly.Blocks['askprice'] = {
     this.setHelpUrl("");
   },
   updateShape_: function () {
-    const field = this.getField('purchase_direction');
+    const field = this.getField('payout_direction');
     if (field) {
       field.menuGenerator_ = purchaseOptions;
       field.setValue(purchaseOptions[0][1]); // reset safely
@@ -650,7 +654,7 @@ function handleSocketMessage(event) {
     case "buy": processBuy(data); break;
     case "proposal": processProposal(data); break;
     case "proposal_open_contract": processOpenContract(data); break;
-    //case "sell": processSell(data); break;
+    case "sell": processSell(data); break;
     default:
       // Silently ignore message types we don't handle
       break;
@@ -1247,19 +1251,27 @@ function processContractsFor(data) {
       secondField.menuGenerator_ = sub;
       // Only reset to first option if current value is a placeholder/empty
       const secondIsPlaceholder = !currentSecondValue || currentSecondValue === 'LOADING' || currentSecondValue === 'OPTIONNAME';
+      let newSecondValue;
       if (secondIsPlaceholder) {
-        secondField.setValue(sub[0]?.[1] ?? '');
+        newSecondValue = sub[0]?.[1] ?? '';
+        secondField.setValue(newSecondValue);
       } else {
         // Check if the current value exists in the new sub data
         const isValidInSub = sub.some(([, v]) => v === currentSecondValue);
         if (isValidInSub) {
           // Keep the saved value — re-apply it so it stays selected
-          secondField.setValue(currentSecondValue);
+          newSecondValue = currentSecondValue;
+          secondField.setValue(newSecondValue);
         } else {
           // Current value doesn't exist in new sub data - reset to first option
           console.log('[Contract] Imported second_category not in new subdata, resetting to first option');
-          secondField.setValue(sub[0]?.[1] ?? '');
+          newSecondValue = sub[0]?.[1] ?? '';
+          secondField.setValue(newSecondValue);
         }
+      }
+      // Ensure purchase/payout/askprice blocks are updated with the new category
+      if (newSecondValue) {
+        secondCatupdateTrigger(block, newSecondValue);
       }
     }
   });
@@ -1886,6 +1898,7 @@ function secondCatupdateTrigger(block, newValue) {
     default:
       break;
   }
+  console.log("Updated options:", options);
 
   purchaseOptions = options
 
@@ -1939,6 +1952,8 @@ async function runBot() {
     updateBotButton();
     console.log('[Bot] Bot stopped manually');
     return;
+  }else{
+    trade_again = true;                            // reset trade again flag on fresh start
   }
 
   // ── START BOT ──
@@ -1996,6 +2011,9 @@ async function bot_trade_closed(response) {
   bot_trade_settings.currunt_purchase_id = null;
   bot_trade_settings.currunt_sell_id = null;
   bot_trade_settings.is_bot_on_trade = false;
+  bot_trade_settings.can_sell = false;
+  bot_trade_settings.current_contract_id = null;
+  bot_trade_settings.current_profit = 0;
 
   // ── Check if the user stopped the bot ──
   // Both the Stop button and mid-trade errors set is_bot_running=false / userStoppedBot=true.
@@ -2009,6 +2027,7 @@ async function bot_trade_closed(response) {
 
   // ── Bot is still running — check if we should trade again ──
   trade_again = false;
+  console.log('[Bot] call tradeAgain block function');
   bot_functions.tradeAgain_f();
 
   if (trade_again) {
@@ -2031,12 +2050,11 @@ async function bot_trade_closed(response) {
   }
 }
 async function unsubscribeFromMarket() {
-  if (!bot_trade_settings.currunt_subscribe_id) return;
+  // Always attempt to unsubscribe to ensure a clean state before a new subscription
   await new Promise((resolve) => {
     socket.send(JSON.stringify({
       forget_all: "ticks"
     }));
-    console.log("unsubscribing from market");
     console.log("unsubscribed from market");
     resolve();
   });
@@ -2814,6 +2832,31 @@ function processBuy(data) {
   console.log(data)
 }
 
+function processSell(data) {
+  console.log('[WS] Sell response:', data);
+
+  const reqId = data.req_id || data.echo_req?.req_id;
+
+  if (data.error) {
+    console.error('[WS] Sell error:', data.error.message);
+
+    if (reqId && pendingProposalResolves[reqId]) {
+      pendingProposalResolves[reqId].reject(new Error(data.error.message));
+      delete pendingProposalResolves[reqId];
+    }
+
+    return;
+  }
+
+  // Successfully sold - resolve the promise with the response data
+  console.log('[WS] Trade sold successfully');
+  
+  if (reqId && pendingProposalResolves[reqId]) {
+    pendingProposalResolves[reqId].resolve(data);
+    delete pendingProposalResolves[reqId];
+  }
+}
+
 function processProposal(data) {
   console.log('[WS] Proposal response:', data);
 
@@ -2844,16 +2887,19 @@ function processProposal(data) {
   }
 
   if (reqId == 11) {
+    bot_trade_settings.over_prop = data;
     bot_trade_settings.over_prop_id = data.proposal.id;
     console.log('[WS] OVER proposal saved:', data.proposal.id);
   }
 
   if (reqId == 99) {
+    bot_trade_settings.under_prop = data;
     bot_trade_settings.under_prop_id = data.proposal.id;
     console.log('[WS] UNDER proposal saved:', data.proposal.id);
   }
 
   if (reqId == 119) {
+    bot_trade_settings.single_prop = data;
     bot_trade_settings.single_prop_id = data.proposal.id;
     bot_trade_settings.over_prop_id = data.proposal.id;
     console.log('[WS] SINGLE proposal saved:', data.proposal.id);
@@ -2899,11 +2945,61 @@ function processOpenContract(data) {
   }
   else {
     // 3. Trade is still running (is_sold === 0 and is_expired === 0)
-    console.log(`Live Profit: $${contract.profit}`);
+    console.log(`Live Profit: $${contract.profit}`, contract);
+    if (contract.is_valid_to_sell == 1) {
+      bot_trade_settings.can_sell = true;
+      bot_trade_settings.current_contract_id = contract.contract_id;
+    } else {
+      bot_trade_settings.can_sell = false;
+      bot_trade_settings.current_contract_id = null;
+    }
+    bot_trade_settings.current_profit = contract.profit;
+    console.log(bot_trade_settings.can_sell ? 'You can sell this trade now.' : 'Not ready to sell yet.');
   }
+
 }
 
+async function bot_sell_trade() {
+  if (!bot_trade_settings.can_sell) {
+    console.warn('Trade cannot be sold yet.');
+    throw new Error('Trade cannot be sold yet');
+  }
 
+  if (!bot_trade_settings.current_contract_id) {
+    console.warn('No contract ID available for selling.');
+    throw new Error('No contract ID available for selling');
+  }
+
+  return new Promise((resolve, reject) => {
+    const reqId = 101;
+    const timeoutId = setTimeout(() => {
+      if (pendingProposalResolves[reqId]) {
+        pendingProposalResolves[reqId].reject(new Error('Sell request timeout'));
+        delete pendingProposalResolves[reqId];
+      }
+    }, 10000); // 10 second timeout
+
+    pendingProposalResolves[reqId] = {
+      resolve: (result) => {
+        clearTimeout(timeoutId);
+        resolve(result);
+      },
+      reject: (error) => {
+        clearTimeout(timeoutId);
+        reject(error);
+      }
+    };
+
+    const data = {
+      "sell": bot_trade_settings.current_contract_id,
+      "price": 0,
+      "req_id": reqId
+    };
+
+    console.log('Sending sell request:', data);
+    socket.send(JSON.stringify(data));
+  });
+}
 
 
 
@@ -3031,16 +3127,94 @@ javascript.javascriptGenerator.forBlock['payout'] = function (block, generator) 
   var dropdown_payout_direction = block.getFieldValue('payout_direction');
   // TODO: Assemble javascript into code variable.
   var code = '...';
+  switch (dropdown_payout_direction) {
+    case "CALL":
+    case "CALLE":
+    case "ASIANU":
+    case "MULTUP":
+    case "VANILLALONGCALL":
+    case "TURBOSLONG":
+    case "ONETOUCH":
+    case "DIGITMATCH":
+    case "DIGITOVER":
+    case "EXPIRYRANGE":
+    case "RANGE":
+    case "RESETCALL":
+    case "RUNHIGH":
+    case "ACCU":
+      code = 'bot_trade_settings.over_prop.proposal.payout';
+      break;
+
+    case "PUT":
+    case "PUTE":
+    case "ASIAND":
+    case "MULTDOWN":
+    case "VANILLALONGPUT":
+    case "TURBOSSHORT":
+    case "NOTOUCH":
+    case "DIGITDIFF":
+    case "DIGITUNDER":
+    case "EXPIRYMISS":
+    case "UPORDOWN":
+    case "RESETPUT":
+    case "RUNLOW":
+      code = 'bot_trade_settings.under_prop.proposal.payout';
+      break;
+    case "ACCU":
+      code = 'bot_trade_settings.single_prop.proposal.payout';
+      break;
+    default:
+      code = '...';
+  }
   // TODO: Change ORDER_NONE to the correct strength.
-  return [code, Blockly.javascript.ORDER_NONE];
+   return [code, javascript.javascriptGenerator.ORDER_NONE];
 };
 
 javascript.javascriptGenerator.forBlock['askprice'] = function (block, generator) {
   var dropdown_payout_direction = block.getFieldValue('payout_direction');
   // TODO: Assemble javascript into code variable.
   var code = '...';
+  switch (dropdown_payout_direction) {
+    case "CALL":
+    case "CALLE":
+    case "ASIANU":
+    case "MULTUP":
+    case "VANILLALONGCALL":
+    case "TURBOSLONG":
+    case "ONETOUCH":
+    case "DIGITMATCH":
+    case "DIGITOVER":
+    case "EXPIRYRANGE":
+    case "RANGE":
+    case "RESETCALL":
+    case "RUNHIGH":
+    case "ACCU":
+      code = 'bot_trade_settings.over_prop.proposal.ask_price';
+      break;
+
+    case "PUT":
+    case "PUTE":
+    case "ASIAND":
+    case "MULTDOWN":
+    case "VANILLALONGPUT":
+    case "TURBOSSHORT":
+    case "NOTOUCH":
+    case "DIGITDIFF":
+    case "DIGITUNDER":
+    case "EXPIRYMISS":
+    case "UPORDOWN":
+    case "RESETPUT":
+    case "RUNLOW":
+      code = 'bot_trade_settings.under_prop.proposal.ask_price';
+      break;
+    case "ACCU":
+      code = 'bot_trade_settings.single_prop.proposal.ask_price';
+      break;
+    default:
+      code = '...';
+  }
   // TODO: Change ORDER_NONE to the correct strength.
-  return [code, Blockly.javascript.ORDER_NONE];
+   return [code, javascript.javascriptGenerator.ORDER_NONE];
 };
 
 javascript.javascriptGenerator.forBlock['purchase'] = function (block, generator) {
@@ -3059,21 +3233,21 @@ javascript.javascriptGenerator.forBlock['go__to_the_trade_option'] = function (b
 
 javascript.javascriptGenerator.forBlock['sell_avilable'] = function (block, generator) {
   // TODO: Assemble javascript into code variable.
-  var code = '...';
+  var code = 'bot_trade_settings.can_sell';
   // TODO: Change ORDER_NONE to the correct strength.
-  return [code, Blockly.javascript.ORDER_NONE];
+  return [code, javascript.javascriptGenerator.ORDER_NONE];
 };
 
 javascript.javascriptGenerator.forBlock['sell_profit_loss'] = function (block, generator) {
   // TODO: Assemble javascript into code variable.
-  var code = '...';
+  var code = 'bot_trade_settings.current_profit';
   // TODO: Change ORDER_NONE to the correct strength.
-  return [code, Blockly.javascript.ORDER_NONE];
+  return [code, javascript.javascriptGenerator.ORDER_NONE];
 };
 
 javascript.javascriptGenerator.forBlock['sell_at_market'] = function (block, generator) {
   // TODO: Assemble javascript into code variable.
-  var code = '...\n';
+  var code = 'bot_sell_trade()';
   return code;
 };
 
