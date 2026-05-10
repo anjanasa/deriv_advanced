@@ -44,6 +44,9 @@ let bot_trade_settings = {
   current_profit: 0
 };
 
+// Deduplicate open contract messages
+let lastOpenContractData = { hash: null, timestamp: 0 };
+
 // Set to true when the user explicitly clicks Stop Bot.
 // bot_trade_closed respects this flag and will NOT restart the loop.
 let userStoppedBot = false;
@@ -308,11 +311,12 @@ Blockly.Blocks['trade_settings'] = {
     // 🔧 Category Logic
     // ----------------------------
 
-    let mainBlocks = workspace.getBlocksByType("main_block");
-    let category = null;
-
-    if (mainBlocks.length > 0) {
-      category = mainBlocks[0].getFieldValue("second_category");
+    let category = this.category || GLOBAL_CATEGORY;
+    if (!category) {
+      const mainBlocks = workspace.getBlocksByType("main_block");
+      if (mainBlocks.length > 0) {
+        category = mainBlocks[0].getFieldValue("second_category");
+      }
     }
 
     switch (category) {
@@ -1651,6 +1655,9 @@ function importBot() {
 
         // Function to load blocks after both market AND contract data are ready
         function loadImportedBlocksWithData() {
+          // Keep import mode active until everything is restored
+          isImporting = true;
+
           // Pre-populate dropdown data so XML values can be restored
           if (importedFirstMarket && globalMarketData[importedFirstMarket]) {
             const marketEntry = globalMarketData[importedFirstMarket];
@@ -1661,6 +1668,11 @@ function importBot() {
               const submarket = marketEntry.submarkets[importedSecondMarket];
               thirdMarketData = submarket.symbols.map(s => [capitalize(s.display_name), s.symbol]);
             }
+          }
+
+          // Ensure import-time dynamic blocks can build with the right category
+          if (importedSecondCategory) {
+            GLOBAL_CATEGORY = importedSecondCategory;
           }
 
           // Load blocks exactly as they are - no value setting, no cascades
@@ -1677,9 +1689,6 @@ function importBot() {
             const block = mainBlocks[0];
             const firstCatField = block.getField('first_category');
             const secondCatField = block.getField('second_category');
-
-            // Set importing flag to prevent dropdown resets
-            isImporting = true;
 
             // Step 1: Set first_category
             if (firstCatField && importedFirstCategory) {
@@ -1714,11 +1723,13 @@ function importBot() {
                   secondCatupdateTrigger(block, importedSecondCategory);
                 }
                 isImporting = false;
+                console.log('[Bot] Blocks loaded successfully with all data ready');
               }, 100);
             }, 100);
+          } else {
+            console.log('[Bot] Blocks loaded successfully with all data ready');
+            isImporting = false;
           }
-
-          console.log('[Bot] Blocks loaded successfully with all data ready');
         }
 
         // Fetch contract data for the imported symbol first, then load blocks
@@ -1838,6 +1849,15 @@ function secondCatupdateTrigger(block, newValue) {
   console.log("secondCatupdateTrigger:", newValue);
   //console.log("available_contracts:", available_contracts);
   GLOBAL_CATEGORY = newValue;
+
+  // Update all trade_settings blocks with the new category (skip during import to preserve connections)
+  if (!isImporting) {
+    const tradeBlocks = workspace.getBlocksByType('trade_settings', false);
+    tradeBlocks.forEach(tradeBlock => {
+      tradeBlock.category = newValue;
+      tradeBlock.updateShape_();
+    });
+  }
 
 
   let options = [];
@@ -2915,24 +2935,35 @@ function processOpenContract(data) {
 
   if (!contract) return;
 
-  // 1. If it's expired but not sold yet, just wait.
-  if (contract.is_expired === 1 && contract.is_sold === 0) {
-    console.log('[WS] Trade finished, waiting for server settlement...');
-    return; // Do nothing, wait for the next message
+  // Deduplicate duplicate messages
+  const now = Date.now();
+  const hash = JSON.stringify(contract);
+  if (hash === lastOpenContractData.hash &&
+      now - lastOpenContractData.timestamp < 500) {
+    return; // Skip duplicate
   }
+  lastOpenContractData.hash = hash;
+  lastOpenContractData.timestamp = now;
 
-  // 2. Once is_sold is exactly 1, the trade is 100% closed and settled!
-  if (contract.is_sold === 1) {
-    console.log('✅ Trade Officially Closed!');
+  if (contract.is_expired == 1 || contract.is_sold == 1) {
+    console.log('[WS] Contract expired, waiting for settlement...');
+    console.log('Contract details:', contract);
+
+        console.log('✅ Trade Officially Closed!');
 
     // contract.status will now be "won" or "lost"
+
     if (contract.status === 'won') {
       console.log(`🤑 WIN! Profit: $${contract.profit}`);
+      bot_trade_settings.last_trade_won = true;
+      bot_trade_settings.last_trade_loss = false;
     } else {
       console.log(`😭 LOSS. Lost: $${contract.profit}`);
+      bot_trade_settings.last_trade_won = false;
+      bot_trade_settings.last_trade_loss = true;
     }
 
-    console.log('New Account Balance:', contract.balance_after);
+
 
     // Forget the stream so it stops sending messages
     if (contract.id) {
@@ -2941,11 +2972,14 @@ function processOpenContract(data) {
       }));
     }
 
+    // Immediately mark trade as closed to stop watchAndSell calls
+    bot_trade_settings.is_bot_on_trade = false;
+    bot_trade_settings.proposal_data_called = false;
+
     bot_trade_closed(contract)
-  }
-  else {
-    // 3. Trade is still running (is_sold === 0 and is_expired === 0)
-    console.log(`Live Profit: $${contract.profit}`, contract);
+  }else{
+        // 3. Trade is still running (is_sold === 0 and is_expired === 0)
+    console.log(`Live Profit: $${contract.profit}`);
     if (contract.is_valid_to_sell == 1) {
       bot_trade_settings.can_sell = true;
       bot_trade_settings.current_contract_id = contract.contract_id;
@@ -2956,6 +2990,20 @@ function processOpenContract(data) {
     bot_trade_settings.current_profit = contract.profit;
     console.log(bot_trade_settings.can_sell ? 'You can sell this trade now.' : 'Not ready to sell yet.');
   }
+
+  // 1. If it's expired but not sold yet, just wait.
+  /*if (contract.is_expired === 1 && contract.is_sold === 0) {
+    console.log('[WS] Trade finished, waiting for server settlement...');
+    return; // Do nothing, wait for the next message
+  }*/
+
+  // 2. Once is_sold is exactly 1, the trade is 100% closed and settled!
+ /* if (contract.is_sold === 1) {
+
+  }
+  else {
+
+  }*/
 
 }
 
@@ -3251,14 +3299,16 @@ javascript.javascriptGenerator.forBlock['sell_at_market'] = function (block, gen
   return code;
 };
 
-javascript.javascriptGenerator.forBlock['result_is'] = function (block, generator) {
+javascript.javascriptGenerator.forBlock['result_is'] = function(block, generator) {
   var dropdown_result_is_direction = block.getFieldValue('result_is_direction');
-  // TODO: Assemble javascript into code variable.
-  var code = '...';
-  // TODO: Change ORDER_NONE to the correct strength.
-  return [code, Blockly.javascript.ORDER_NONE];
+  
+  var code = dropdown_result_is_direction === "won" ? 'bot_trade_settings.last_trade_won' :
+             dropdown_result_is_direction === "loss" ? 'bot_trade_settings.last_trade_loss' :
+             'null';
+  
+  // Just use 0 as a safe default order value
+  return [code, 0];
 };
-
 javascript.javascriptGenerator.forBlock['contract_details'] = function (block, generator) {
   var dropdown_result_is_direction = block.getFieldValue('result_is_direction');
   // TODO: Assemble javascript into code variable.
