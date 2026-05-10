@@ -392,7 +392,15 @@ Blockly.Blocks['purchase'] = {
     const field = this.getField('purchase_direction');
     if (field) {
       field.menuGenerator_ = purchaseOptions;
-      field.setValue(purchaseOptions[0][1]); // reset safely
+      // Always preserve existing value, never reset to first option
+      const currentValue = field.getValue();
+      const isValid = purchaseOptions.some(([, v]) => v === currentValue);
+      // Only set default if no value exists or value is invalid
+      if (!currentValue || !isValid) {
+        const defaultValue = purchaseOptions[0]?.[1] ?? '';
+        field.setValue(defaultValue);
+        console.log(`[Purchase] Set default value: ${defaultValue} (current: ${currentValue}, valid: ${isValid})`);
+      }
     }
   }
 
@@ -415,7 +423,15 @@ Blockly.Blocks['payout'] = {
     const field = this.getField('payout_direction');
     if (field) {
       field.menuGenerator_ = purchaseOptions;
-      field.setValue(purchaseOptions[0][1]); // reset safely
+      // Always preserve existing value, never reset to first option
+      const currentValue = field.getValue();
+      const isValid = purchaseOptions.some(([, v]) => v === currentValue);
+      // Only set default if no value exists or value is invalid
+      if (!currentValue || !isValid) {
+        const defaultValue = purchaseOptions[0]?.[1] ?? '';
+        field.setValue(defaultValue);
+        console.log(`[Payout] Set default value: ${defaultValue} (current: ${currentValue}, valid: ${isValid})`);
+      }
     }
   }
 };
@@ -437,7 +453,15 @@ Blockly.Blocks['askprice'] = {
     const field = this.getField('payout_direction');
     if (field) {
       field.menuGenerator_ = purchaseOptions;
-      field.setValue(purchaseOptions[0][1]); // reset safely
+      // Always preserve existing value, never reset to first option
+      const currentValue = field.getValue();
+      const isValid = purchaseOptions.some(([, v]) => v === currentValue);
+      // Only set default if no value exists or value is invalid
+      if (!currentValue || !isValid) {
+        const defaultValue = purchaseOptions[0]?.[1] ?? '';
+        field.setValue(defaultValue);
+        console.log(`[AskPrice] Set default value: ${defaultValue} (current: ${currentValue}, valid: ${isValid})`);
+      }
     }
   }
 };
@@ -678,12 +702,22 @@ function handleAuthorize(data) {
     return;
   }
 
+  // Check if this was an account switch BEFORE clearing the flag
+  const wasAccountChanging = isAccountChanging;
+  
   // Reset account changing flag on successful authorization
   isAccountChanging = false;
   console.log('[Auth] Authorization successful, isAccountChanging flag cleared');
 
   afterAuthorized(data);
-  getActiveMarkets();
+  
+  // Only refresh markets if this is NOT an account switch
+  // (account switches should preserve current block settings)
+  if (!wasAccountChanging) {
+    getActiveMarkets();
+  } else {
+    console.log('[Auth] Account switch completed — preserving current block settings');
+  }
 }
 
 function processTicks(data) {
@@ -1620,6 +1654,11 @@ function importBot() {
         let importedBuySellError = null;
         let importedLastTradeOnError = null;
 
+        // Extract field values from purchase/payout/askprice blocks
+        let importedPurchaseDirections = [];
+        let importedPayoutDirections = [];
+        let importedAskpriceDirections = [];
+
         // Find main_block in XML and extract field values
         const mainBlockElement = xml.querySelector('block[type="main_block"]');
         if (mainBlockElement) {
@@ -1637,6 +1676,25 @@ function importBot() {
           importedBuySellError = getFieldValue('buySellError');
           importedLastTradeOnError = getFieldValue('lastTradeOnError');
         }
+
+        // Extract field values from purchase/payout/askprice blocks
+        const purchaseBlocks = xml.querySelectorAll('block[type="purchase"]');
+        purchaseBlocks.forEach(block => {
+          const field = block.querySelector('field[name="purchase_direction"]');
+          if (field) importedPurchaseDirections.push(field.textContent);
+        });
+
+        const payoutBlocks = xml.querySelectorAll('block[type="payout"]');
+        payoutBlocks.forEach(block => {
+          const field = block.querySelector('field[name="payout_direction"]');
+          if (field) importedPayoutDirections.push(field.textContent);
+        });
+
+        const askpriceBlocks = xml.querySelectorAll('block[type="askprice"]');
+        askpriceBlocks.forEach(block => {
+          const field = block.querySelector('field[name="payout_direction"]');
+          if (field) importedAskpriceDirections.push(field.textContent);
+        });
 
         // Get bot name from filename
         const nameWithoutExt = file.name.replace(/\.xml$/i, '').replace(/_/g, ' ');
@@ -1673,9 +1731,81 @@ function importBot() {
           // Ensure import-time dynamic blocks can build with the right category
           if (importedSecondCategory) {
             GLOBAL_CATEGORY = importedSecondCategory;
+            
+            // Pre-populate purchaseOptions based on the imported category BEFORE loading XML
+            let preOptions = [];
+            switch (importedSecondCategory) {
+              case "Accumulator Up":
+              case "Accumulators":
+                preOptions = [["Accumulator", "ACCU"]]
+                break;
+              case "Asian Up/Asian Down":
+                preOptions = [["Asian Up", "ASIANU"], ["Asian Down", "ASIAND"]]
+                break;
+              case "Rise/Fall":
+                preOptions = [["Rise", "CALL"], ["Fall", "PUT"]]
+                break;
+              case "Higher/Lower":
+                preOptions = [["Higher", "CALL"], ["Lower", "PUT"]]
+                break;
+              case "Higher/Lower (Equals)":
+                preOptions = [["Higher Equals", "CALLE"], ["Lower Equals", "PUTE"]]
+                break;
+              case "Digit Match/Digit Differs":
+                preOptions = [["Digit Match", "DIGITMATCH"], ["Digit Differs", "DIGITDIFF"]]
+                break;
+              case "Digit Odd/Digit Even":
+                preOptions = [["Digit Odd", "DIGITODD"], ["Digit Even", "DIGITEVEN"]]
+                break;
+              case "Digit Over/Digit Under":
+                preOptions = [["Digit Over", "DIGITOVER"], ["Digit Under", "DIGITUNDER"]]
+                break;
+              case "Ends Between/Ends Outside":
+                preOptions = [["Ends Between", "EXPIRYRANGE"], ["Ends Outside", "EXPIRYMISS"]]
+                break;
+              case "High Tick/Low Tick":
+                preOptions = [["High Tick", "TICKHIGH"], ["Low Tick", "TICKLOW"]]
+                break;
+              case "Multiply Up/Multiply Down":
+                preOptions = [["Multiply Up", "MULTUP"], ["Multiply Down", "MULTDOWN"]]
+                break;
+              case "Reset Call/Reset Put":
+                preOptions = [["Reset Call", "RESETCALL"], ["Reset Put", "RESETPUT"]]
+                break;
+              case "Only Up/Only Down":
+                preOptions = [["Only Up", "RUNHIGH"], ["Only Down", "RUNLOW"]]
+                break;
+              case "Stay Between/Goes Outside":
+                preOptions = [["Stay Between", "RANGE"], ["Goes Outside", "UPORDOWN"]]
+                break;
+              case "One Touch/No Touch":
+                preOptions = [["One Touch", "ONETOUCH"], ["No Touch", "NOTOUCH"]]
+                break;
+              case "Turbo Long/Turbo Short":
+                preOptions = [["Turbo Long", "TURBOSLONG"], ["Turbo Short", "TURBOSSHORT"]]
+                break;
+              case "Vanilla Long Call/Vanilla Long Put":
+                preOptions = [["Vanilla Long Call", "VANILLALONGCALL"], ["Vanilla Long Put", "VANILLALONGPUT"]]
+                break;
+              default:
+                break;
+            }
+            purchaseOptions = preOptions;
           }
 
-          // Load blocks exactly as they are - no value setting, no cascades
+          // Pre-populate main block dropdowns if we have imported category data
+          if (importedFirstCategory && importedSecondCategory) {
+            // Ensure mainContractTypes includes the imported first category
+            if (!mainContractTypes.some(([display, value]) => value === importedFirstCategory)) {
+              // Add it if missing - this is a fallback
+              const categoryDisplay = importedFirstCategory.charAt(0).toUpperCase() + importedFirstCategory.slice(1);
+              mainContractTypes.push([categoryDisplay, importedFirstCategory]);
+            }
+
+            // Note: subdata population for imported categories is now handled in the manual restoration below
+          }
+
+          // Load blocks exactly as they are - XML values should now be valid
           workspace.clear();
           Blockly.Xml.domToWorkspace(savedXml, workspace);
 
@@ -1690,24 +1820,32 @@ function importBot() {
             const firstCatField = block.getField('first_category');
             const secondCatField = block.getField('second_category');
 
-            // Step 1: Set first_category
-            if (firstCatField && importedFirstCategory) {
+            // Determine the correct first_category for the imported second_category
+            let targetFirstCategory = importedFirstCategory;
+            if (importedFirstCategory && importedSecondCategory) {
               const isValidFirst = mainContractTypes.some(([, v]) => v === importedFirstCategory);
-              if (isValidFirst) {
-                firstCatField.setValue(importedFirstCategory);
-              } else {
+              if (!isValidFirst) {
                 // Find the category that contains our second_category
-                let foundCategory = null;
                 for (const [cat, subOptions] of Object.entries(subdata)) {
                   if (subOptions.some(([, v]) => v === importedSecondCategory)) {
-                    foundCategory = cat;
+                    targetFirstCategory = cat;
                     break;
                   }
                 }
-                if (foundCategory) {
-                  firstCatField.setValue(foundCategory);
-                }
               }
+
+              // Ensure the target category includes our imported second_category
+              if (targetFirstCategory && !subdata[targetFirstCategory]) {
+                subdata[targetFirstCategory] = [];
+              }
+              if (targetFirstCategory && !subdata[targetFirstCategory].some(([display, value]) => value === importedSecondCategory)) {
+                subdata[targetFirstCategory].push([importedSecondCategory, importedSecondCategory]);
+              }
+            }
+
+            // Step 1: Set first_category
+            if (firstCatField && targetFirstCategory) {
+              firstCatField.setValue(targetFirstCategory);
             }
 
             // Step 2: Wait for first_category to update, then set second_category
@@ -1716,14 +1854,150 @@ function importBot() {
               const currentFirstCat = block.getFieldValue('first_category');
               updateSecondCategoryDropdown(block, currentFirstCat);
 
-              // Step 3: Set the second_category value
-              setTimeout(() => {
-                if (secondCatField && importedSecondCategory) {
-                  secondCatField.setValue(importedSecondCategory);
-                  secondCatupdateTrigger(block, importedSecondCategory);
-                }
-                isImporting = false;
-                console.log('[Bot] Blocks loaded successfully with all data ready');
+// Step 3: Set the second_category value
+                setTimeout(() => {
+                  console.log('[Bot] Setting main block fields...');
+                  if (secondCatField && importedSecondCategory) {
+                    console.log(`[Bot] Setting second_category to: ${importedSecondCategory}`);
+                    // Validate the category is in the current sub-options
+                    const currentSubOptions = subdata[currentFirstCat] || [];
+                    const isValidCategory = currentSubOptions.some(([, v]) => v === importedSecondCategory);
+                    if (isValidCategory) {
+                      secondCatField.setValue(importedSecondCategory);
+                      secondCatupdateTrigger(block, importedSecondCategory);
+                    } else {
+                      console.warn(`[Bot] Invalid imported second_category: ${importedSecondCategory} for category ${currentFirstCat}, using default`);
+                      // Set to the first available option
+                      if (currentSubOptions.length > 0) {
+                        secondCatField.setValue(currentSubOptions[0][1]);
+                        secondCatupdateTrigger(block, currentSubOptions[0][1]);
+                      }
+                    }
+                  }
+
+                  // Step 4: Set ALL other imported field values with validation
+                  const validateAndSetField = (fieldName, value, validOptions = null) => {
+                    if (value === null || value === undefined) return false;
+                    
+                    let isValid = true;
+                    if (validOptions) {
+                      isValid = validOptions.some(([, v]) => v === value);
+                    }
+                    
+                    if (isValid) {
+                      console.log(`[Bot] Setting ${fieldName} to: ${value}`);
+                      block.getField(fieldName)?.setValue(value);
+                      return true;
+                    } else {
+                      console.warn(`[Bot] Invalid ${fieldName}: ${value}, using default`);
+                      return false;
+                    }
+                  };
+
+                  validateAndSetField('first_market', importedFirstMarket);
+                  validateAndSetField('second_market', importedSecondMarket);
+                  validateAndSetField('third_market', importedThirdMarket);
+                  validateAndSetField('contract_type', importedContractType, [['single', 'single'], ['both', 'both']]);
+                  validateAndSetField('candle_interval', importedCandleInterval, 
+                    ['1m', '2m', '3m', '5m', '10m', '15m', '30m', '1h', '2h', '4h', '8h', '1d']);
+                  if (importedBuySellError !== null) {
+                    validateAndSetField('buySellError', importedBuySellError.toString(), ['TRUE', 'FALSE']);
+                  }
+                  if (importedLastTradeOnError !== null) {
+                    validateAndSetField('lastTradeOnError', importedLastTradeOnError.toString(), ['TRUE', 'FALSE']);
+                  }
+
+                // Step 5: Restore field values for purchase/payout/askprice blocks
+                setTimeout(() => {
+                  console.log('[Bot] Restoring imported field values...');
+                  let purchaseIndex = 0;
+                  let payoutIndex = 0;
+                  let askpriceIndex = 0;
+
+                  // Helper function to validate and set dropdown values
+                  const setValidatedDropdown = (field, value, blockType, index) => {
+                    if (!field) return false;
+                    
+                    const isValid = purchaseOptions.some(([, v]) => v === value);
+                    if (isValid) {
+                      console.log(`[Bot] Setting ${blockType} block ${index} to: ${value}`);
+                      field.setValue(value);
+                      return true;
+                    } else {
+                      console.warn(`[Bot] Invalid ${blockType} value: ${value}, using default: ${purchaseOptions[0]?.[1]}`);
+                      field.setValue(purchaseOptions[0]?.[1] ?? '');
+                      return false;
+                    }
+                  };
+
+                  // Restore purchase block directions
+                  const purchaseBlocks = workspace.getBlocksByType('purchase', false);
+                  purchaseBlocks.forEach(block => {
+                    if (purchaseIndex < importedPurchaseDirections.length) {
+                      const field = block.getField('purchase_direction');
+                      setValidatedDropdown(field, importedPurchaseDirections[purchaseIndex], 'purchase', purchaseIndex);
+                      purchaseIndex++;
+                    }
+                  });
+
+                  // Restore payout block directions
+                  const payoutBlocks = workspace.getBlocksByType('payout', false);
+                  payoutBlocks.forEach(block => {
+                    if (payoutIndex < importedPayoutDirections.length) {
+                      const field = block.getField('payout_direction');
+                      setValidatedDropdown(field, importedPayoutDirections[payoutIndex], 'payout', payoutIndex);
+                      payoutIndex++;
+                    }
+                  });
+
+                  // Restore askprice block directions
+                  const askpriceBlocks = workspace.getBlocksByType('askprice', false);
+                  askpriceBlocks.forEach(block => {
+                    if (askpriceIndex < importedAskpriceDirections.length) {
+                      const field = block.getField('payout_direction');
+                      setValidatedDropdown(field, importedAskpriceDirections[askpriceIndex], 'askprice', askpriceIndex);
+                      askpriceIndex++;
+                    }
+                  });
+
+                  // Now that values are restored, update the block shapes to ensure dropdowns are correct
+                  // Use smaller delay to prevent race conditions
+                  setTimeout(() => {
+                    const allPurchaseBlocks = workspace.getBlocksByType('purchase', false);
+                    const allPayoutBlocks = workspace.getBlocksByType('payout', false);
+                    const allAskpriceBlocks = workspace.getBlocksByType('askprice', false);
+
+                    console.log('[Bot] Updating block shapes for imported blocks...');
+                    
+                    // Update shapes but preserve imported values
+                    allPurchaseBlocks.forEach(block => {
+                      const currentValue = block.getField('purchase_direction')?.getValue();
+                      block.updateShape_();
+                      if (currentValue) {
+                        block.getField('purchase_direction')?.setValue(currentValue);
+                      }
+                    });
+                    
+                    allPayoutBlocks.forEach(block => {
+                      const currentValue = block.getField('payout_direction')?.getValue();
+                      block.updateShape_();
+                      if (currentValue) {
+                        block.getField('payout_direction')?.setValue(currentValue);
+                      }
+                    });
+                    
+                    allAskpriceBlocks.forEach(block => {
+                      const currentValue = block.getField('payout_direction')?.getValue();
+                      block.updateShape_();
+                      if (currentValue) {
+                        block.getField('payout_direction')?.setValue(currentValue);
+                      }
+                    });
+
+                    isImporting = false;
+                    console.log('[Bot] Blocks loaded successfully with all data populated');
+                  }, 50);
+                }, 200);
               }, 100);
             }, 100);
           } else {
@@ -1790,58 +2064,8 @@ function importBot() {
 
 
 function block_change_detect() {
-  workspace.addChangeListener(function (event) {
-
-    // Ignore non-change events if needed
-    if (event.type !== Blockly.Events.BLOCK_CHANGE) return;
-
-    // Do not rebuild shapes during bot import, as this detaches already-saved inputs
-    if (typeof isImporting !== 'undefined' && isImporting) return;
-
-    const block = workspace.getBlockById(event.blockId);
-    if (!block) return;
-
-    if (block.type === 'main_block') {
-      /*console.log('Main block changed:', {
-          blockId: event.blockId,
-          field: event.name,
-          value: event.newValue
-      });*/
-      if (event.name === 'second_category') {
-
-        let blocks = workspace.getBlocksByType('trade_settings', false);
-
-        blocks.forEach(tBlock => {
-
-          // 🔷 set category
-          tBlock.category = event.newValue;
-
-          // 🔷 rebuild structure
-          tBlock.updateShape_();
-
-          // 🔷 force UI refresh
-          tBlock.render();
-          
-          // 🔷 attach math_number to empty value inputs after update
-          if (tBlock.inputList) {
-            tBlock.inputList.forEach(input => {
-              // Blockly.INPUT_VALUE is 1
-              if (input.type === Blockly.INPUT_VALUE && (!input.connection || !input.connection.targetConnection)) {
-                const numberBlock = workspace.newBlock('math_number');
-                numberBlock.setFieldValue('1', 'NUM');
-                numberBlock.initSvg();
-                numberBlock.render();
-                if (input.connection) {
-                  numberBlock.outputConnection.connect(input.connection);
-                }
-              }
-            });
-          }
-        });
-      }
-    }
-
-  });
+  // This listener is now redundant; all changes are handled by onWorkspaceChange()
+  // and secondCatupdateTrigger(), which properly manage category updates.
 }
 
 
@@ -1850,14 +2074,15 @@ function secondCatupdateTrigger(block, newValue) {
   //console.log("available_contracts:", available_contracts);
   GLOBAL_CATEGORY = newValue;
 
-  // Update all trade_settings blocks with the new category (skip during import to preserve connections)
-  if (!isImporting) {
-    const tradeBlocks = workspace.getBlocksByType('trade_settings', false);
-    tradeBlocks.forEach(tradeBlock => {
-      tradeBlock.category = newValue;
+  // Always update trade_settings blocks to reflect the new category
+  const tradeBlocks = workspace.getBlocksByType('trade_settings', false);
+  tradeBlocks.forEach(tradeBlock => {
+    tradeBlock.category = newValue;
+    if (!isImporting) {
+      // Only rebuild shape during non-import; import preserves XML structure
       tradeBlock.updateShape_();
-    });
-  }
+    }
+  });
 
 
   let options = [];
@@ -1922,19 +2147,21 @@ function secondCatupdateTrigger(block, newValue) {
 
   purchaseOptions = options
 
-  // ✅ Update ALL existing blocks
-  let blocks = workspace.getBlocksByType('purchase', false);
-  blocks.forEach(block => {
-    block.updateShape_();
-  });
-  blocks = workspace.getBlocksByType('payout', false);
-  blocks.forEach(block => {
-    block.updateShape_();
-  });
-  blocks = workspace.getBlocksByType('askprice', false);
-  blocks.forEach(block => {
-    block.updateShape_();
-  });
+  // ✅ Always update blocks so dropdowns are populated (each block preserves values if importing)
+  if (!isImporting) {
+    let blocks = workspace.getBlocksByType('purchase', false);
+    blocks.forEach(block => {
+      block.updateShape_();
+    });
+    blocks = workspace.getBlocksByType('payout', false);
+    blocks.forEach(block => {
+      block.updateShape_();
+    });
+    blocks = workspace.getBlocksByType('askprice', false);
+    blocks.forEach(block => {
+      block.updateShape_();
+    });
+  }
   // ✅ Refresh toolbox so NEW blocks use updated dropdown
   workspace.updateToolbox(workspace.options.languageTree);
 

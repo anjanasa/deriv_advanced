@@ -76,16 +76,9 @@ Blockly.defineBlocksWithJsonArray([
     {
       "type": "field_dropdown",
       "name": "payout_direction",
-      "options": [
-        [
-          "option",
-          "OPTIONNAME"
-        ],
-        [
-          "option",
-          "OPTIONNAME"
-        ]
-      ]
+      "options": function() {
+        return window.purchaseOptions && window.purchaseOptions.length > 0 ? window.purchaseOptions : [["Loading...", "LOADING"]];
+      }
     }
   ],
   "inputsInline": false,
@@ -101,16 +94,9 @@ Blockly.defineBlocksWithJsonArray([
     {
       "type": "field_dropdown",
       "name": "payout_direction",
-      "options": [
-        [
-          "option",
-          "OPTIONNAME"
-        ],
-        [
-          "option",
-          "OPTIONNAME"
-        ]
-      ]
+      "options": function() {
+        return window.purchaseOptions && window.purchaseOptions.length > 0 ? window.purchaseOptions : [["Loading...", "LOADING"]];
+      }
     }
   ],
   "inputsInline": false,
@@ -126,16 +112,9 @@ Blockly.defineBlocksWithJsonArray([
     {
       "type": "field_dropdown",
       "name": "purchase_direction",
-      "options": [
-        [
-          "option",
-          "OPTIONNAME"
-        ],
-        [
-          "option",
-          "OPTIONNAME"
-        ]
-      ]
+      "options": function() {
+        return window.purchaseOptions && window.purchaseOptions.length > 0 ? window.purchaseOptions : [["Loading...", "LOADING"]];
+      }
     }
   ],
   "inputsInline": false,

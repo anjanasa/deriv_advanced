@@ -1,0 +1,18 @@
+<xml xmlns="https://developers.google.com/blockly/xml">
+  <block type="main_block" id="main_block" x="50" y="50">
+    <field name="first_market">synthetic_index</field>
+    <field name="second_market">continuous_indices</field>
+    <field name="third_market">R_10</field>
+    <field name="first_category">digits</field>
+    <field name="second_category">Digit Match/Digit Differs</field>
+  </block>
+  <block type="purchase" id="purchase_block" x="200" y="100">
+    <field name="purchase_direction">DIGITDIFF</field>
+  </block>
+  <block type="payout" id="payout_block" x="200" y="150">
+    <field name="payout_direction">DIGITDIFF</field>
+  </block>
+  <block type="askprice" id="askprice_block" x="200" y="200">
+    <field name="payout_direction">DIGITDIFF</field>
+  </block>
+</xml>
